@@ -6,8 +6,8 @@
   <title>Infinite Multi-Draw Pro</title>
   <style>
     :root {
-      /* Modern Dark Glass Mode */
-      --bg-panel: rgba(20, 20, 25, 0.75);
+      /* Premium Dark Glass Mode */
+      --bg-panel: rgba(20, 20, 25, 0.78);
       --text: #ffffff;
       --text-muted: rgba(255, 255, 255, 0.6);
       --border: rgba(255, 255, 255, 0.08);
@@ -16,11 +16,13 @@
       --chat-mine: #007aff;
       --chat-other: rgba(255, 255, 255, 0.1);
       --panel-shadow: 0 20px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+      --dot-green: #30d158;
+      --dot-red: #ff453a;
     }
 
     [data-theme="light"] {
-      /* Modern Light Glass Mode */
-      --bg-panel: rgba(245, 245, 250, 0.8);
+      /* Premium Light Glass Mode */
+      --bg-panel: rgba(245, 245, 250, 0.85);
       --text: #1c1c1e;
       --text-muted: rgba(0, 0, 0, 0.5);
       --border: rgba(0, 0, 0, 0.06);
@@ -29,6 +31,8 @@
       --chat-mine: #007aff;
       --chat-other: rgba(0, 0, 0, 0.05);
       --panel-shadow: 0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.5);
+      --dot-green: #34c759;
+      --dot-red: #ff3b30;
     }
 
     * { 
@@ -57,27 +61,51 @@
       left: 0;
     }
 
+    /* Cinematic 4-Second Loading Screen Overlay */
+    #loading-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #09090b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1), transform 0.6s ease;
+    }
+    .intro-title {
+      color: #ffffff;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      text-align: center;
+      animation: pulseGlow 2s infinite ease-in-out;
+    }
+    .intro-subtitle {
+      color: rgba(255,255,255,0.5);
+      font-size: 1rem;
+      font-weight: 400;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(0.98); opacity: 0.85; text-shadow: 0 0 0px rgba(0,122,255,0); }
+      50% { transform: scale(1.02); opacity: 1; text-shadow: 0 0 20px rgba(0,122,255,0.6); }
+    }
+
     /* Landscape Mode Enforcer */
     #landscape-warning {
       display: none; 
       position: fixed; 
-      top: 0; 
-      left: 0; 
-      width: 100%; 
-      height: 100%;
-      background: #09090b; 
-      color: white; 
-      z-index: 99999;
-      align-items: center; 
-      justify-content: center; 
-      text-align: center; 
-      font-size: 1.2rem; 
-      font-weight: 500;
-      padding: 20px;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #09090b; color: white; z-index: 99999;
+      align-items: center; justify-content: center; text-align: center; 
+      font-size: 1.2rem; font-weight: 500; padding: 20px;
     }
     @media (orientation: portrait) { #landscape-warning { display: flex; } }
 
-    /* Premium Floating Panel */
+    /* Premium Floating Control Hub */
     #floating-panel {
       position: absolute; 
       top: 20px; 
@@ -95,10 +123,29 @@
       overflow: hidden; 
       max-height: calc(100vh - 40px);
       z-index: 1000;
-      transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1), height 0.3s cubic-bezier(0.25, 1, 0.5, 1), border-radius 0.3s ease;
+      transition: width 0.35s cubic-bezier(0.25, 1, 0.5, 1), height 0.35s cubic-bezier(0.25, 1, 0.5, 1), border-radius 0.35s ease;
     }
     
-    /* Minimized Micro Action Circle */
+    /* Notification Status Alert Dot */
+    #noti-dot {
+      position: absolute;
+      top: 13px;
+      left: 48px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--dot-green);
+      z-index: 1005;
+      box-shadow: 0 0 8px var(--dot-green);
+      transition: background-color 0.3s, box-shadow 0.3s;
+      pointer-events: none;
+    }
+    #noti-dot.unread {
+      background-color: var(--dot-red);
+      box-shadow: 0 0 10px var(--dot-red);
+    }
+
+    /* Minimized Compact Mode (Floating Action Dot Container) */
     #floating-panel.minimized { 
       width: 56px; 
       height: 56px; 
@@ -108,22 +155,18 @@
       display: none; 
     }
     #floating-panel.minimized #drag-handle {
-      border: none;
-      background: transparent;
-      width: 100%;
-      height: 100%;
-      padding: 0;
-      justify-content: center;
+      border: none; background: transparent; width: 100%; height: 100%; padding: 0; justify-content: center;
     }
     #floating-panel.minimized #drag-handle .handle-bar,
     #floating-panel.minimized #drag-handle #theme-toggle {
       display: none;
     }
     #floating-panel.minimized #minimize-toggle {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      font-size: 20px;
+      width: 100%; height: 100%; margin: 0; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;
+    }
+    #floating-panel.minimized #noti-dot {
+      top: 8px;
+      left: 38px;
     }
 
     /* Drag Handle Frame */
@@ -143,7 +186,7 @@
     .btn-icon:hover { background: rgba(255,255,255,0.1); }
 
     /* Layout Panel Body */
-    .panel-content { padding: 20px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; flex: 1; }
+    .panel-content { padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; flex: 1; }
 
     /* Control Structuring */
     .control-group { display: flex; flex-direction: column; gap: 8px; }
@@ -157,7 +200,7 @@
       -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--text); cursor: pointer; border: 2px solid var(--accent);
     }
 
-    /* Mode Navigation Segment */
+    /* Mode Navigation Segments */
     .mode-segment {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -167,25 +210,14 @@
       border: 1px solid var(--border);
     }
     .segment-btn {
-      padding: 8px;
-      background: none;
-      border: none;
-      color: var(--text);
-      font-weight: 600;
-      font-size: 0.85rem;
-      border-radius: 9px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
+      padding: 8px; background: none; border: none; color: var(--text); font-weight: 600; font-size: 0.85rem; border-radius: 9px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.2s, color 0.2s;
     }
     .segment-btn.active {
-      background: var(--text);
-      color: var(--bg-panel);
+      background: var(--text); color: var(--bg-panel);
     }
     
-    /* Grid Structuring */
+    /* Grid Layout Frameworks */
     .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
     
     .brush-btn { 
@@ -197,8 +229,13 @@
     .color-btn.active { border-color: var(--text); transform: scale(1.1); box-shadow: 0 0 10px rgba(0,0,0,0.2); }
     #color-picker { width: 100%; aspect-ratio: 1; border: none; border-radius: 50%; cursor: pointer; padding: 0; background: none; }
     
-    /* Interface Utility Buttons */
-    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    /* Custom Media/Image Section styling */
+    .image-control-box {
+      background: rgba(0,0,0,0.04); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px;
+    }
+
+    /* Interface Utility Action Grid */
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .action-btn { 
       padding: 11px; border-radius: 12px; border: none; font-weight: 600; font-size: 0.8rem; cursor: pointer;
       background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); transition: background 0.2s;
@@ -206,10 +243,11 @@
     .action-btn:active { background: rgba(255,255,255,0.15); }
     .action-btn.danger { background: rgba(255, 59, 48, 0.15); color: #ff453a; border-color: rgba(255, 59, 48, 0.2); }
     .action-btn.danger:active { background: rgba(255, 59, 48, 0.3); }
+    .action-btn.active-toggle { background: #ff9500; color: white; border-color: #ff9500; }
 
-    /* Real-Time Database Messaging Hub */
+    /* Real-Time Communication Hub */
     #chat-box { 
-      flex: 1; min-height: 110px; max-height: 150px; border: 1px solid var(--border); border-radius: 14px; 
+      flex: 1; min-height: 90px; max-height: 120px; border: 1px solid var(--border); border-radius: 14px; 
       padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.04); 
     }
     .chat-msg { padding: 7px 12px; border-radius: 14px; font-size: 0.8rem; max-width: 85%; word-wrap: break-word; line-height: 1.3; }
@@ -228,11 +266,18 @@
 </head>
 <body>
 
+  <div id="loading-screen">
+    <div class="intro-title">Multidraw</div>
+    <div class="intro-subtitle">For amazingngn Zann</div>
+  </div>
+
   <div id="landscape-warning">Please rotate your device to Landscape Mode.</div>
   
   <canvas id="canvas"></canvas>
 
   <div id="floating-panel">
+    <div id="noti-dot"></div>
+
     <div id="drag-handle">
       <button id="theme-toggle" class="btn-icon">☀️</button>
       <div class="handle-bar"></div>
@@ -242,7 +287,7 @@
     <div class="panel-content">
       <div class="mode-segment">
         <button class="segment-btn active" id="mode-draw">✏️ Draw</button>
-        <button class="segment-btn" id="mode-move">🖐️ Move</button>
+        <button class="segment-btn" id="mode-move">🖐️ Move Workspace</button>
       </div>
 
       <div class="control-group">
@@ -281,6 +326,21 @@
         </div>
       </div>
 
+      <div class="control-group">
+        <label>Canvas Image Engine</label>
+        <div class="image-control-box">
+          <button class="action-btn" id="btn-upload-trigger">📷 Add Image File</button>
+          <input type="file" id="image-uploader" accept="image/*" style="display: none;">
+          
+          <div class="control-group">
+            <label>Image Scale: <span id="scale-val">100</span>%</label>
+            <input type="range" id="image-scale-slider" min="0" max="3" step="0.02" value="1">
+          </div>
+          
+          <button class="action-btn" id="btn-toggle-img-move">🔒 Move Image Mode: Off</button>
+        </div>
+      </div>
+
       <div class="action-grid">
         <button class="action-btn" id="btn-recenter">Re-center</button>
         <button class="action-btn" id="btn-undo">Undo Last</button>
@@ -289,7 +349,7 @@
       </div>
 
       <div class="control-group">
-        <label>Live Chat</label>
+        <label>Live Synchronized Chat</label>
         <div id="chat-box"></div>
         <div class="chat-input-row">
           <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
@@ -320,7 +380,14 @@
 
     const myUid = 'user_' + Math.random().toString(36).substr(2, 9);
 
-    // Context Processing Configurations
+    // Initial Screen Load Intro Animation Handler
+    setTimeout(() => {
+      const introScreen = document.getElementById('loading-screen');
+      introScreen.style.opacity = '0';
+      setTimeout(() => introScreen.remove(), 600);
+    }, 4000);
+
+    // Canvas Element Context Initializations
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { alpha: false });
     let width = window.innerWidth;
@@ -335,9 +402,10 @@
     }
     window.addEventListener('resize', resize);
 
-    // Transformation Vectors
+    // Camera Vectors & Interface States
     let camera = { x: 0, y: 0, scale: 1 };
-    let currentMode = 'draw'; // 'draw' or 'move'
+    let currentMode = 'draw'; // Modes: 'draw', 'move'
+    let isMovingImageMode = false; // Separate override switch state for individual image translation
     let tool = { color: '#000000', size: 10, opacity: 1, brush: 'solid' };
     
     let isDrawing = false;
@@ -346,9 +414,18 @@
     let localStrokes = {}; 
     let strokeOrder = []; 
 
-    // Touch Event Variables
+    // Advanced Image Engine State Trackers
+    let canvasImage = {
+      element: null,
+      x: 0, // In World coordinates
+      y: 0, // In World coordinates
+      scale: 1
+    };
+
+    // Multi-touch Tracking Elements
     let initialPinchDistance = null;
     let initialCamera = null;
+    let initialImagePos = null;
     let activeTouches = {};
     let initialPanCenter = null;
 
@@ -367,7 +444,7 @@
       return { x: sumX / touches.length, y: sumY / touches.length };
     }
 
-    // Engine Render Architecture
+    // Engine Core Vector Brush Styling Architectures
     function applyBrushStyles(ctxToUse, brushType, color, size, opacity) {
       ctxToUse.lineCap = 'round';
       ctxToUse.lineJoin = 'round';
@@ -377,7 +454,6 @@
       ctxToUse.shadowColor = 'transparent';
 
       if (brushType === 'eraser') {
-        // Since background color is locked to pure white, drawing white acts as an infinite-space eraser
         ctxToUse.strokeStyle = '#ffffff';
         return;
       }
@@ -424,6 +500,7 @@
     }
 
     function drawAll() {
+      // Clear Main Frame Buffers
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
 
@@ -431,13 +508,58 @@
       ctx.translate(camera.x, camera.y);
       ctx.scale(camera.scale, camera.scale);
 
+      // Render uploaded images inside World Coordinate parameters if active
+      if (canvasImage.element) {
+        ctx.save();
+        ctx.translate(canvasImage.x, canvasImage.y);
+        ctx.scale(canvasImage.scale, canvasImage.scale);
+        try {
+          ctx.drawImage(canvasImage.element, -canvasImage.element.width / 2, -canvasImage.element.height / 2);
+        } catch(e) {}
+        ctx.restore();
+      }
+
+      // Loop over and draw active database vector paths
       for(let id of strokeOrder) {
         if(localStrokes[id]) renderStroke(ctx, localStrokes[id]);
       }
+
+      // Live "lover" target cursor name tags tracking for other active writers
+      for(let id of strokeOrder) {
+        let currentStroke = localStrokes[id];
+        if(currentStroke && currentStroke.uid !== myUid && currentStroke.pts) {
+          let ptsArr = currentStroke.pts.split(';');
+          let lastPtStr = ptsArr[ptsArr.length - 1];
+          if(lastPtStr) {
+            let [lx, ly] = lastPtStr.split(',').map(Number);
+            if(!isNaN(lx) && !isNaN(ly)) {
+              // Draw small stylized tag container near the end coordinate vector
+              ctx.save();
+              ctx.fillStyle = 'rgba(255, 69, 58, 0.9)';
+              ctx.font = 'bold ' + Math.max(12, 14 / camera.scale) + 'px sans-serif';
+              let textMetric = ctx.measureText("lover");
+              let paddingW = 8 / camera.scale;
+              let paddingH = 4 / camera.scale;
+              
+              ctx.fillRect(
+                lx + (10 / camera.scale), 
+                ly - (24 / camera.scale), 
+                textMetric.width + (paddingW * 2), 
+                parseInt(ctx.font) + (paddingH * 2)
+              );
+              
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText("lover", lx + (10 / camera.scale) + paddingW, ly - (10 / camera.scale));
+              ctx.restore();
+            }
+          }
+        }
+      }
+
       ctx.restore();
     }
 
-    // Touch Interaction Layer
+    // Touch Interaction Logic Controller Layers
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       for(let i=0; i<e.changedTouches.length; i++) {
@@ -445,14 +567,21 @@
       }
       let touches = Object.values(activeTouches);
 
-      // Force Panning if 3 fingers down or if Explicit Move Mode is on
-      if (touches.length === 3 || (currentMode === 'move' && touches.length === 1)) {
+      // Condition 1: "Move Image Mode" is explicitly enabled (Locks canvas completely)
+      if (isMovingImageMode && canvasImage.element && touches.length === 1) {
+        isDrawing = false;
+        isPanning = false;
+        initialPanCenter = { x: touches[0].clientX, y: touches[0].clientY };
+        initialImagePos = { x: canvasImage.x, y: canvasImage.y };
+      } 
+      // Condition 2: Explicit Workspace Mode Panning OR 3-Finger Pan Gestures Anywhere
+      else if (touches.length === 3 || (currentMode === 'move' && touches.length === 1)) {
         isDrawing = false;
         isPanning = true;
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       } 
-      // 2-Finger Zoom Gesture
+      // Condition 3: Multi-touch Zoom/Pinch Operations
       else if (touches.length === 2) {
         isDrawing = false;
         isPanning = true;
@@ -462,7 +591,7 @@
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       } 
-      // Single Finger Canvas Interaction (Draw Mode Only)
+      // Condition 4: Regular Drawing Mode Interception Vector
       else if (touches.length === 1 && currentMode === 'draw') {
         isDrawing = true;
         isPanning = false;
@@ -489,7 +618,16 @@
       }
       let touches = Object.values(activeTouches);
 
-      if (isDrawing && touches.length === 1 && currentStrokeId) {
+      // Handler 1: Move Only the Image Workspace
+      if (isMovingImageMode && canvasImage.element && initialImagePos && touches.length === 1) {
+        let deltaX = (touches[0].clientX - initialPanCenter.x) / camera.scale;
+        let deltaY = (touches[0].clientY - initialPanCenter.y) / camera.scale;
+        canvasImage.x = initialImagePos.x + deltaX;
+        canvasImage.y = initialImagePos.y + deltaY;
+        drawAll();
+      }
+      // Handler 2: Process Local Drawing Paths Configuration Input
+      else if (isDrawing && touches.length === 1 && currentStrokeId) {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         let stroke = localStrokes[currentStrokeId];
         stroke.pts += `;${pt.x.toFixed(1)},${pt.y.toFixed(1)}`;
@@ -497,6 +635,7 @@
         set(ref(db, `strokes/${currentStrokeId}/pts`), stroke.pts);
         drawAll(); 
       }
+      // Handler 3: Process Workspace Camera Updates
       else if (isPanning && initialPanCenter) {
         let currentCenter = getTouchCenter(touches);
         let deltaX = currentCenter.x - initialPanCenter.x;
@@ -510,7 +649,6 @@
           let scaleDiff = dist / initialPinchDistance;
           let newScale = initialCamera.scale * scaleDiff;
 
-          // Precise pin-to-center scaling tracking logic
           let worldX = (currentCenter.x - initialCamera.x) / initialCamera.scale;
           let worldY = (currentCenter.y - initialCamera.y) / initialCamera.scale;
 
@@ -518,7 +656,6 @@
           camera.x = currentCenter.x - worldX * camera.scale;
           camera.y = currentCenter.y - worldY * camera.scale;
         } else {
-          // Pure Pan Tracking (Move Mode Single Finger / 3-Finger Gesture)
           camera.x = initialCamera.x + deltaX;
           camera.y = initialCamera.y + deltaY;
         }
@@ -539,15 +676,15 @@
         currentStrokeId = null;
         initialPinchDistance = null;
         initialPanCenter = null;
+        initialImagePos = null;
       } else {
-        // Reset anchor maps to prevent visual canvas jumping on multi-touch drops
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
         if (touches.length !== 2) initialPinchDistance = null;
       }
     });
 
-    // Cloud Database Real-time Synchronizations
+    // Cloud Database Architecture Observers
     onChildAdded(strokesRef, (snapshot) => {
       let id = snapshot.key;
       if(!localStrokes[id]) {
@@ -581,7 +718,7 @@
     });
 
 
-    // ==== INTERFACE INTERACTIVE UX DEPLOYMENT ====
+    // ==== INTERFACE OPERATIONAL ENGINE AND UX SETS ====
 
     // Panel Draggable Module Setup
     const panel = document.getElementById('floating-panel');
@@ -610,18 +747,20 @@
     }, { passive: true });
     window.addEventListener('touchend', () => isDraggingPanel = false);
 
-    // Minimize System State Transition
+    // Minimize Configuration UI state mappings
+    const notiDot = document.getElementById('noti-dot');
     document.getElementById('minimize-toggle').onclick = () => {
       panel.classList.toggle('minimized');
-      document.getElementById('minimize-toggle').innerText = panel.classList.contains('minimized') ? '展开' : '🔽';
       if(panel.classList.contains('minimized')) {
-        document.getElementById('minimize-toggle').innerHTML = `<span style="font-size:12px; font-weight:bold;">MENU</span>`;
+        document.getElementById('minimize-toggle').innerHTML = `<span style="font-size:10px;">MENU</span>`;
       } else {
         document.getElementById('minimize-toggle').innerText = '🔽';
+        // Turning green as user expands control panel to read logs
+        notiDot.classList.remove('unread');
       }
     };
 
-    // Style Schema Theme Transitions
+    // Color theme layouts toggles
     document.getElementById('theme-toggle').onclick = () => {
       let current = document.documentElement.getAttribute('data-theme');
       let next = current === 'light' ? 'dark' : 'light';
@@ -629,7 +768,7 @@
       document.getElementById('theme-toggle').innerText = next === 'light' ? '🌙' : '☀️';
     };
 
-    // Mode Controller Configurations
+    // Global Interactive Segment State Mappings
     const modeDrawBtn = document.getElementById('mode-draw');
     const modeMoveBtn = document.getElementById('mode-move');
     
@@ -644,7 +783,7 @@
       modeDrawBtn.classList.remove('active');
     };
 
-    // Range Controllers
+    // Size Meter Triggers
     document.getElementById('thickness').oninput = (e) => {
       tool.size = parseInt(e.target.value);
       document.getElementById('thick-val').innerText = tool.size;
@@ -655,14 +794,13 @@
       document.getElementById('opac-val').innerText = Math.round(tool.opacity * 100);
     };
 
-    // Brush Variant Selection Logic
+    // Brush Selection Logic Pipeline
     document.querySelectorAll('.brush-btn').forEach(btn => {
       btn.onclick = () => {
         document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         tool.brush = btn.getAttribute('data-brush');
 
-        // Hide structural layers unneeded for functional erasures
         if(tool.brush === 'eraser') {
           document.getElementById('color-container').style.opacity = '0.3';
           document.getElementById('color-container').style.pointerEvents = 'none';
@@ -677,7 +815,7 @@
       };
     });
 
-    // Color Pick Systems
+    // Custom Color Managers
     document.querySelectorAll('.color-btn').forEach(btn => {
       btn.onclick = () => {
         document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
@@ -691,7 +829,61 @@
       tool.color = e.target.value;
     };
 
-    // Functional Operational Action Commands
+
+    // ==== CANVAS IMAGE ENGINE HANDLING UTILITIES ====
+    
+    const imageUploader = document.getElementById('image-uploader');
+    const imgScaleSlider = document.getElementById('image-scale-slider');
+    const toggleImgMoveBtn = document.getElementById('btn-toggle-img-move');
+
+    document.getElementById('btn-upload-trigger').onclick = () => imageUploader.click();
+
+    imageUploader.onchange = (e) => {
+      let file = e.target.files[0];
+      if (!file) return;
+
+      let reader = new FileReader();
+      reader.onload = (event) => {
+        let img = new Image();
+        img.onload = () => {
+          canvasImage.element = img;
+          // Spawn newly uploaded image inside current center viewpoint coordinates
+          let centerWorld = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+          canvasImage.x = centerWorld.x;
+          canvasImage.y = centerWorld.y;
+          canvasImage.scale = 1;
+          imgScaleSlider.value = 1;
+          document.getElementById('scale-val').innerText = "100";
+          drawAll();
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // Live Scale Sliders (0% to 300%)
+    imgScaleSlider.oninput = (e) => {
+      canvasImage.scale = parseFloat(e.target.value);
+      document.getElementById('scale-val').innerText = Math.round(canvasImage.scale * 100);
+      drawAll();
+    };
+
+    // Lock-canvas Explicit Move Image Selector Mode Trigger
+    toggleImgMoveBtn.onclick = () => {
+      if (!canvasImage.element) return alert("Please upload an image first!");
+      isMovingImageMode = !isMovingImageMode;
+      if (isMovingImageMode) {
+        toggleImgMoveBtn.innerText = "🔓 Move Image Mode: On";
+        toggleImgMoveBtn.classList.add('active-toggle');
+      } else {
+        toggleImgMoveBtn.innerText = "🔒 Move Image Mode: Off";
+        toggleImgMoveBtn.classList.remove('active-toggle');
+      }
+    };
+
+
+    // ==== ADVANCED SYSTEM OPERATION FUNCTIONS ====
+
     document.getElementById('btn-recenter').onclick = resetCamera;
     
     document.getElementById('btn-undo').onclick = async () => {
@@ -711,34 +903,53 @@
     };
 
     document.getElementById('btn-save').onclick = () => {
-      if(strokeOrder.length === 0) return alert('Canvas is empty!');
+      if(strokeOrder.length === 0 && !canvasImage.element) return alert('Canvas workspace is empty!');
       
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
+      // Calculate layout dimension maps using vector paths bounds
       for(let id of strokeOrder) {
         let stroke = localStrokes[id];
         if(!stroke.pts) continue;
         let pts = stroke.pts.split(';');
         for(let pt of pts) {
           let [x,y] = pt.split(',').map(Number);
-          if(x < minX) minX = x;
-          if(x > maxX) maxX = x;
-          if(y < minY) minY = y;
-          if(y > maxY) maxY = y;
+          if(x < minX) minX = x; if(x > maxX) maxX = x;
+          if(y < minY) minY = y; if(y > maxY) maxY = y;
         }
       }
 
-      let pad = 100;
+      // Append Image boundary specifications inside total coordinate box metrics calculation if available
+      if (canvasImage.element) {
+        let halfW = (canvasImage.element.width * canvasImage.scale) / 2;
+        let halfH = (canvasImage.element.height * canvasImage.scale) / 2;
+        if (canvasImage.x - halfW < minX) minX = canvasImage.x - halfW;
+        if (canvasImage.x + halfW > maxX) maxX = canvasImage.x + halfW;
+        if (canvasImage.y - halfH < minY) minY = canvasImage.y - halfH;
+        if (canvasImage.y + halfH > maxY) maxY = canvasImage.y + halfH;
+      }
+
+      let pad = 80;
       minX -= pad; minY -= pad; maxX += pad; maxY += pad;
       
       let offCanvas = document.createElement('canvas');
-      offCanvas.width = maxX - minX;;
+      offCanvas.width = maxX - minX;
       offCanvas.height = maxY - minY;
       let offCtx = offCanvas.getContext('2d');
       offCtx.fillStyle = '#ffffff';
       offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
       offCtx.translate(-minX, -minY);
       
+      // Paint offscreen render image buffer layer
+      if (canvasImage.element) {
+        offCtx.save();
+        offCtx.translate(canvasImage.x, canvasImage.y);
+        offCtx.scale(canvasImage.scale, canvasImage.scale);
+        offCtx.drawImage(canvasImage.element, -canvasImage.element.width / 2, -canvasImage.element.height / 2);
+        offCtx.restore();
+      }
+
+      // Paint offscreen render stroke vector path layer
       for(let id of strokeOrder) {
         if(localStrokes[id]) renderStroke(offCtx, localStrokes[id]);
       }
@@ -749,7 +960,7 @@
       link.click();
     };
 
-    // Chat Protocol Deployment
+    // Chat Interface Logic Core Engines
     const chatBox = document.getElementById('chat-box');
     const chatInput = document.getElementById('chat-input');
     
@@ -763,6 +974,7 @@
     document.getElementById('send-chat').onclick = sendMsg;
     chatInput.onkeypress = (e) => { if(e.key === 'Enter') sendMsg(); };
 
+    // Set notification red alert on message child events
     onChildAdded(chatRef, (snapshot) => {
       let msg = snapshot.val();
       let div = document.createElement('div');
@@ -770,9 +982,19 @@
       div.innerText = msg.text;
       chatBox.appendChild(div);
       chatBox.scrollTop = chatBox.scrollHeight;
+
+      // Trigger red alert indicator dot if control panel menu is minimized or hidden
+      if(msg.uid !== myUid && (panel.classList.contains('minimized'))) {
+        notiDot.classList.add('unread');
+      }
     });
 
-    // Immediate Boot Vector Executions (Fixes the initial loading invisibility error)
+    // Reset status alert dot to green mode when user clicks inside messaging interface input box
+    chatInput.onfocus = () => {
+      notiDot.classList.remove('unread');
+    };
+
+    // Runtime Direct Injections Initializations
     resize();
     resetCamera();
 
