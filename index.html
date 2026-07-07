@@ -145,7 +145,7 @@
       box-shadow: 0 0 10px var(--dot-red);
     }
 
-    /* Minimized Compact Mode (Floating Action Dot Container) */
+    /* Minimized Compact Mode Container */
     #floating-panel.minimized { 
       width: 56px; 
       height: 56px; 
@@ -238,7 +238,7 @@
     .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .action-btn { 
       padding: 11px; border-radius: 12px; border: none; font-weight: 600; font-size: 0.8rem; cursor: pointer;
-      background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); transition: background 0.2s;
+      background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); transition: background 0.2s, color 0.2s;
     }
     .action-btn:active { background: rgba(255,255,255,0.15); }
     .action-btn.danger { background: rgba(255, 59, 48, 0.15); color: #ff453a; border-color: rgba(255, 59, 48, 0.2); }
@@ -329,7 +329,10 @@
       <div class="control-group">
         <label>Canvas Image Engine</label>
         <div class="image-control-box">
-          <button class="action-btn" id="btn-upload-trigger">📷 Add Image File</button>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+            <button class="action-btn" id="btn-upload-trigger">📷 Add Image</button>
+            <button class="action-btn danger" id="btn-remove-image">🗑️ Remove Image</button>
+          </div>
           <input type="file" id="image-uploader" accept="image/*" style="display: none;">
           
           <div class="control-group">
@@ -344,8 +347,9 @@
       <div class="action-grid">
         <button class="action-btn" id="btn-recenter">Re-center</button>
         <button class="action-btn" id="btn-undo">Undo Last</button>
+        <button class="action-btn" id="btn-toggle-nametags">🏷️ Tags: On</button>
         <button class="action-btn" id="btn-save">Save Image</button>
-        <button class="action-btn danger" id="btn-clear">Clear All</button>
+        <button class="action-btn danger" id="btn-clear" style="grid-column: span 2;">Clear All Canvas</button>
       </div>
 
       <div class="control-group">
@@ -377,6 +381,7 @@
     const db = getDatabase(app);
     const strokesRef = ref(db, 'strokes');
     const chatRef = ref(db, 'chat');
+    const imageRef = ref(db, 'sharedImage');
 
     const myUid = 'user_' + Math.random().toString(36).substr(2, 9);
 
@@ -404,8 +409,9 @@
 
     // Camera Vectors & Interface States
     let camera = { x: 0, y: 0, scale: 1 };
-    let currentMode = 'draw'; // Modes: 'draw', 'move'
-    let isMovingImageMode = false; // Separate override switch state for individual image translation
+    let currentMode = 'draw'; 
+    let isMovingImageMode = false; 
+    let showNameTags = true;
     let tool = { color: '#000000', size: 10, opacity: 1, brush: 'solid' };
     
     let isDrawing = false;
@@ -414,11 +420,12 @@
     let localStrokes = {}; 
     let strokeOrder = []; 
 
-    // Advanced Image Engine State Trackers
+    // Dynamic Database Image Sync Object Definition
     let canvasImage = {
       element: null,
-      x: 0, // In World coordinates
-      y: 0, // In World coordinates
+      src: null,
+      x: 0, 
+      y: 0, 
       scale: 1
     };
 
@@ -482,7 +489,6 @@
     function renderStroke(ctxToUse, stroke) {
       if(!stroke.pts || stroke.pts.length === 0) return;
       ctxToUse.save();
-      
       applyBrushStyles(ctxToUse, stroke.brush, stroke.color, stroke.size, stroke.opacity);
       
       ctxToUse.beginPath();
@@ -500,7 +506,6 @@
     }
 
     function drawAll() {
-      // Clear Main Frame Buffers
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
 
@@ -508,7 +513,7 @@
       ctx.translate(camera.x, camera.y);
       ctx.scale(camera.scale, camera.scale);
 
-      // Render uploaded images inside World Coordinate parameters if active
+      // Render shared image inside World Coordinate system if active in cloud DB
       if (canvasImage.element) {
         ctx.save();
         ctx.translate(canvasImage.x, canvasImage.y);
@@ -524,33 +529,45 @@
         if(localStrokes[id]) renderStroke(ctx, localStrokes[id]);
       }
 
-      // Live "lover" target cursor name tags tracking for other active writers
-      for(let id of strokeOrder) {
-        let currentStroke = localStrokes[id];
-        if(currentStroke && currentStroke.uid !== myUid && currentStroke.pts) {
-          let ptsArr = currentStroke.pts.split(';');
-          let lastPtStr = ptsArr[ptsArr.length - 1];
-          if(lastPtStr) {
-            let [lx, ly] = lastPtStr.split(',').map(Number);
-            if(!isNaN(lx) && !isNaN(ly)) {
-              // Draw small stylized tag container near the end coordinate vector
-              ctx.save();
-              ctx.fillStyle = 'rgba(255, 69, 58, 0.9)';
-              ctx.font = 'bold ' + Math.max(12, 14 / camera.scale) + 'px sans-serif';
-              let textMetric = ctx.measureText("lover");
-              let paddingW = 8 / camera.scale;
-              let paddingH = 4 / camera.scale;
-              
-              ctx.fillRect(
-                lx + (10 / camera.scale), 
-                ly - (24 / camera.scale), 
-                textMetric.width + (paddingW * 2), 
-                parseInt(ctx.font) + (paddingH * 2)
-              );
-              
-              ctx.fillStyle = '#ffffff';
-              ctx.fillText("lover", lx + (10 / camera.scale) + paddingW, ly - (10 / camera.scale));
-              ctx.restore();
+      // Dynamic "lover" target cursor text tag rendering layer
+      if (showNameTags) {
+        for(let id of strokeOrder) {
+          let currentStroke = localStrokes[id];
+          // Condition: Check if path belongs to a peer, contains coordinates, and is actively being written (!finished)
+          if(currentStroke && currentStroke.uid !== myUid && currentStroke.pts && !currentStroke.finished) {
+            let ptsArr = currentStroke.pts.split(';');
+            let lastPtStr = ptsArr[ptsArr.length - 1];
+            if(lastPtStr) {
+              let [lx, ly] = lastPtStr.split(',').map(Number);
+              if(!isNaN(lx) && !isNaN(ly)) {
+                ctx.save();
+                ctx.font = 'bold ' + Math.max(12, 14 / camera.scale) + 'px sans-serif';
+                let textMetric = ctx.measureText("lover");
+                
+                let paddingW = 8 / camera.scale;
+                let paddingH = 5 / camera.scale;
+                let fontSize = Math.max(12, 14 / camera.scale);
+                
+                let tx = lx + (14 / camera.scale);
+                let ty = ly - (12 / camera.scale);
+                let rectW = textMetric.width + (paddingW * 2);
+                let rectH = fontSize + (paddingH * 2);
+                
+                // Premium Transparent Blackish Red Capsule Background Circle
+                ctx.fillStyle = 'rgba(65, 8, 8, 0.72)';
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                  ctx.roundRect(tx, ty - fontSize, rectW, rectH, 8 / camera.scale);
+                } else {
+                  ctx.rect(tx, ty - fontSize, rectW, rectH);
+                }
+                ctx.fill();
+                
+                // Clear White Foreground Text
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText("lover", tx + paddingW, ty + (fontSize * 0.08));
+                ctx.restore();
+              }
             }
           }
         }
@@ -567,21 +584,21 @@
       }
       let touches = Object.values(activeTouches);
 
-      // Condition 1: "Move Image Mode" is explicitly enabled (Locks canvas completely)
+      // Condition 1: Move Image override state
       if (isMovingImageMode && canvasImage.element && touches.length === 1) {
         isDrawing = false;
         isPanning = false;
         initialPanCenter = { x: touches[0].clientX, y: touches[0].clientY };
         initialImagePos = { x: canvasImage.x, y: canvasImage.y };
       } 
-      // Condition 2: Explicit Workspace Mode Panning OR 3-Finger Pan Gestures Anywhere
+      // Condition 2: Explicit Move mode or 3 finger pan
       else if (touches.length === 3 || (currentMode === 'move' && touches.length === 1)) {
         isDrawing = false;
         isPanning = true;
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       } 
-      // Condition 3: Multi-touch Zoom/Pinch Operations
+      // Condition 3: Multi-touch zoom/pinches
       else if (touches.length === 2) {
         isDrawing = false;
         isPanning = true;
@@ -591,7 +608,7 @@
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       } 
-      // Condition 4: Regular Drawing Mode Interception Vector
+      // Condition 4: Basic Write/Draw Operations
       else if (touches.length === 1 && currentMode === 'draw') {
         isDrawing = true;
         isPanning = false;
@@ -600,7 +617,7 @@
         currentStrokeId = newStrokeRef.key;
         
         let newStroke = {
-          uid: myUid, color: tool.color, size: tool.size, opacity: tool.opacity, brush: tool.brush, pts: `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`
+          uid: myUid, color: tool.color, size: tool.size, opacity: tool.opacity, brush: tool.brush, pts: `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`, finished: false
         };
         
         localStrokes[currentStrokeId] = newStroke;
@@ -618,15 +635,19 @@
       }
       let touches = Object.values(activeTouches);
 
-      // Handler 1: Move Only the Image Workspace
+      // Handler 1: Move global position values of image synced live across network
       if (isMovingImageMode && canvasImage.element && initialImagePos && touches.length === 1) {
         let deltaX = (touches[0].clientX - initialPanCenter.x) / camera.scale;
         let deltaY = (touches[0].clientY - initialPanCenter.y) / camera.scale;
         canvasImage.x = initialImagePos.x + deltaX;
         canvasImage.y = initialImagePos.y + deltaY;
         drawAll();
+        
+        // Push positional coordinate structures directly to the database path
+        set(ref(db, 'sharedImage/x'), canvasImage.x);
+        set(ref(db, 'sharedImage/y'), canvasImage.y);
       }
-      // Handler 2: Process Local Drawing Paths Configuration Input
+      // Handler 2: Write operational line coordinates vectors
       else if (isDrawing && touches.length === 1 && currentStrokeId) {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         let stroke = localStrokes[currentStrokeId];
@@ -635,7 +656,7 @@
         set(ref(db, `strokes/${currentStrokeId}/pts`), stroke.pts);
         drawAll(); 
       }
-      // Handler 3: Process Workspace Camera Updates
+      // Handler 3: Shift camera operations viewport metrics
       else if (isPanning && initialPanCenter) {
         let currentCenter = getTouchCenter(touches);
         let deltaX = currentCenter.x - initialPanCenter.x;
@@ -670,6 +691,11 @@
       }
       let touches = Object.values(activeTouches);
       
+      // Notify database that my current active stroke object is finished (removes label tag immediately)
+      if (isDrawing && currentStrokeId) {
+        set(ref(db, `strokes/${currentStrokeId}/finished`), true);
+      }
+
       if (touches.length === 0) {
         isDrawing = false;
         isPanning = false;
@@ -684,7 +710,17 @@
       }
     });
 
-    // Cloud Database Architecture Observers
+    canvas.addEventListener('touchcancel', (e) => {
+      if (currentStrokeId) {
+        set(ref(db, `strokes/${currentStrokeId}/finished`), true);
+      }
+      activeTouches = {};
+      isDrawing = false;
+      isPanning = false;
+      currentStrokeId = null;
+    });
+
+    // Cloud Database Synchronizations & Direct Pipeline Receivers
     onChildAdded(strokesRef, (snapshot) => {
       let id = snapshot.key;
       if(!localStrokes[id]) {
@@ -696,8 +732,10 @@
 
     onChildChanged(strokesRef, (snapshot) => {
       let id = snapshot.key;
-      if(localStrokes[id] && id !== currentStrokeId) {
-        localStrokes[id].pts = snapshot.val().pts;
+      if(localStrokes[id]) {
+        let data = snapshot.val();
+        localStrokes[id].pts = data.pts;
+        localStrokes[id].finished = data.finished;
         drawAll();
       }
     });
@@ -713,6 +751,42 @@
       if(!snap.exists()) {
         localStrokes = {};
         strokeOrder = [];
+        drawAll();
+      }
+    });
+
+    // Bidirectional Shared Image Database Sync Core Engine
+    onValue(imageRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.src) {
+        if (canvasImage.src !== data.src) {
+          const img = new Image();
+          img.onload = () => {
+            canvasImage.element = img;
+            canvasImage.src = data.src;
+            canvasImage.x = data.x;
+            canvasImage.y = data.y;
+            canvasImage.scale = data.scale;
+            
+            // Adjust slider parameters uniformly across all connected screens
+            document.getElementById('image-scale-slider').value = data.scale;
+            document.getElementById('scale-val').innerText = Math.round(data.scale * 100);
+            drawAll();
+          };
+          img.src = data.src;
+        } else {
+          // Frame matrix updating without reloading raw image file elements
+          canvasImage.x = data.x;
+          canvasImage.y = data.y;
+          canvasImage.scale = data.scale;
+          document.getElementById('image-scale-slider').value = data.scale;
+          document.getElementById('scale-val').innerText = Math.round(data.scale * 100);
+          drawAll();
+        }
+      } else {
+        // Clear object frames globally if deleted from the remote database
+        canvasImage.element = null;
+        canvasImage.src = null;
         drawAll();
       }
     });
@@ -755,7 +829,6 @@
         document.getElementById('minimize-toggle').innerHTML = `<span style="font-size:10px;">MENU</span>`;
       } else {
         document.getElementById('minimize-toggle').innerText = '🔽';
-        // Turning green as user expands control panel to read logs
         notiDot.classList.remove('unread');
       }
     };
@@ -830,7 +903,7 @@
     };
 
 
-    // ==== CANVAS IMAGE ENGINE HANDLING UTILITIES ====
+    // ==== CANVAS GLOBAL IMAGE ENGINE CONTROLLERS ====
     
     const imageUploader = document.getElementById('image-uploader');
     const imgScaleSlider = document.getElementById('image-scale-slider');
@@ -846,26 +919,52 @@
       reader.onload = (event) => {
         let img = new Image();
         img.onload = () => {
-          canvasImage.element = img;
-          // Spawn newly uploaded image inside current center viewpoint coordinates
+          // Pre-compress large images down to optimal sizes to keep network performance high
+          let maxDimension = 800;
+          let targetW = img.width;
+          let targetH = img.height;
+          if (targetW > maxDimension || targetH > maxDimension) {
+            if (targetW > targetH) { targetH = Math.round((targetH * maxDimension) / targetW); targetW = maxDimension; }
+            else { targetW = Math.round((targetW * maxDimension) / targetH); targetH = maxDimension; }
+          }
+          
+          let processCanvas = document.createElement('canvas');
+          processCanvas.width = targetW;
+          processCanvas.height = targetH;
+          let processCtx = processCanvas.getContext('2d');
+          processCtx.drawImage(img, 0, 0, targetW, targetH);
+          let optimizedDataURL = processCanvas.toDataURL('image/jpeg', 0.75);
+
           let centerWorld = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
-          canvasImage.x = centerWorld.x;
-          canvasImage.y = centerWorld.y;
-          canvasImage.scale = 1;
-          imgScaleSlider.value = 1;
-          document.getElementById('scale-val').innerText = "100";
-          drawAll();
+          
+          // Push initial structural data directly to Firebase to make it visible to everyone
+          set(imageRef, {
+            src: optimizedDataURL,
+            x: centerWorld.x,
+            y: centerWorld.y,
+            scale: 1
+          });
         };
         img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     };
 
-    // Live Scale Sliders (0% to 300%)
+    // Remove Image Controller -> Deletes the database record completely
+    document.getElementById('btn-remove-image').onclick = () => {
+      if(canvasImage.element) {
+        remove(imageRef);
+      } else {
+        alert("No image active on the canvas landscape.");
+      }
+    };
+
+    // Live Scale Sliders (0% to 300%) linked to remote DB parameters
     imgScaleSlider.oninput = (e) => {
-      canvasImage.scale = parseFloat(e.target.value);
-      document.getElementById('scale-val').innerText = Math.round(canvasImage.scale * 100);
-      drawAll();
+      let targetScale = parseFloat(e.target.value);
+      if (canvasImage.element) {
+        set(ref(db, 'sharedImage/scale'), targetScale);
+      }
     };
 
     // Lock-canvas Explicit Move Image Selector Mode Trigger
@@ -886,6 +985,20 @@
 
     document.getElementById('btn-recenter').onclick = resetCamera;
     
+    // Toggle system text indicators parameter state changes
+    const toggleTagsBtn = document.getElementById('btn-toggle-nametags');
+    toggleTagsBtn.onclick = () => {
+      showNameTags = !showNameTags;
+      if(showNameTags) {
+        toggleTagsBtn.innerText = "🏷️ Tags: On";
+        toggleTagsBtn.classList.remove('danger');
+      } else {
+        toggleTagsBtn.innerText = "🏷️ Tags: Off";
+        toggleTagsBtn.classList.add('danger');
+      }
+      drawAll();
+    };
+
     document.getElementById('btn-undo').onclick = async () => {
       for(let i = strokeOrder.length - 1; i >= 0; i--) {
         let id = strokeOrder[i];
@@ -907,7 +1020,6 @@
       
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
-      // Calculate layout dimension maps using vector paths bounds
       for(let id of strokeOrder) {
         let stroke = localStrokes[id];
         if(!stroke.pts) continue;
@@ -919,7 +1031,6 @@
         }
       }
 
-      // Append Image boundary specifications inside total coordinate box metrics calculation if available
       if (canvasImage.element) {
         let halfW = (canvasImage.element.width * canvasImage.scale) / 2;
         let halfH = (canvasImage.element.height * canvasImage.scale) / 2;
@@ -940,7 +1051,6 @@
       offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
       offCtx.translate(-minX, -minY);
       
-      // Paint offscreen render image buffer layer
       if (canvasImage.element) {
         offCtx.save();
         offCtx.translate(canvasImage.x, canvasImage.y);
@@ -949,7 +1059,6 @@
         offCtx.restore();
       }
 
-      // Paint offscreen render stroke vector path layer
       for(let id of strokeOrder) {
         if(localStrokes[id]) renderStroke(offCtx, localStrokes[id]);
       }
@@ -974,7 +1083,6 @@
     document.getElementById('send-chat').onclick = sendMsg;
     chatInput.onkeypress = (e) => { if(e.key === 'Enter') sendMsg(); };
 
-    // Set notification red alert on message child events
     onChildAdded(chatRef, (snapshot) => {
       let msg = snapshot.val();
       let div = document.createElement('div');
@@ -983,18 +1091,16 @@
       chatBox.appendChild(div);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Trigger red alert indicator dot if control panel menu is minimized or hidden
       if(msg.uid !== myUid && (panel.classList.contains('minimized'))) {
         notiDot.classList.add('unread');
       }
     });
 
-    // Reset status alert dot to green mode when user clicks inside messaging interface input box
     chatInput.onfocus = () => {
       notiDot.classList.remove('unread');
     };
 
-    // Runtime Direct Injections Initializations
+    // Runtime Initialization Injections
     resize();
     resetCamera();
 
