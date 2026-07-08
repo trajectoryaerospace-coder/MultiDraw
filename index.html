@@ -260,12 +260,6 @@
       border-radius: 50%;
     }
     
-    #chat-panel.minimized .chat-content,
-    #chat-panel.minimized .chat-input-row,
-    #chat-panel.minimized .emoji-bar {
-      display: none;
-    }
-    
     #chat-drag-handle {
       height: 48px;
       display: flex;
@@ -378,15 +372,10 @@
     #send-chat:hover { background: var(--accent-hover); }
 
     @media (max-height: 700px) {
-      #chat-panel {
-        height: 360px;
-      }
+      #chat-panel { height: 360px; }
     }
     @media (max-width: 480px) {
-      #chat-panel {
-        width: calc(100vw - 40px);
-        right: 20px;
-      }
+      #chat-panel { width: calc(100vw - 40px); right: 20px; }
     }
   </style>
 </head>
@@ -399,7 +388,7 @@
  
   <canvas id="canvas"></canvas>
   
-  <!-- Main Control Panel (unchanged) -->
+  <!-- Main Control Panel -->
   <div id="floating-panel">
     <div id="noti-dot"></div>
     <div id="drag-handle">
@@ -1210,14 +1199,15 @@
       isDraggingChat = false;
     });
     
-    // Chat Minimize
-    document.getElementById('chat-minimize-toggle').onclick = () => {
+    // FIXED: Reliable Minimize / Maximize Toggle
+    const chatMinimizeBtn = document.getElementById('chat-minimize-toggle');
+    chatMinimizeBtn.onclick = () => {
       chatPanel.classList.toggle('minimized');
-      const toggleBtn = document.getElementById('chat-minimize-toggle');
+      
       if(chatPanel.classList.contains('minimized')) {
-        toggleBtn.innerHTML = `<span style="font-size:10px;">CHAT</span>`;
+        chatMinimizeBtn.innerHTML = `<span style="font-size:11px; font-weight:700;">CHAT</span>`;
       } else {
-        toggleBtn.innerText = '🔽';
+        chatMinimizeBtn.innerText = '🔽';
       }
     };
     
