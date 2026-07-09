@@ -1481,10 +1481,13 @@
       }
      
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let hasValidVisibleElements = false;
      
       for(let id of strokeOrder) {
         let stroke = localStrokes[id];
-        if(!stroke || !stroke.pts) continue;
+        // CRITICAL FIX: Skip measurements if the stroke is an eraser
+        if(!stroke || !stroke.pts || stroke.brush === 'eraser') continue;
+        
         let pts = stroke.pts.split(';');
         for(let pt of pts) {
           let parts = pt.split(',');
@@ -1493,6 +1496,7 @@
           let y = parseFloat(parts[1]);
           if(x < minX) minX = x; if(x > maxX) maxX = x;
           if(y < minY) minY = y; if(y > maxY) maxY = y;
+          hasValidVisibleElements = true;
         }
       }
       
@@ -1505,9 +1509,15 @@
           if (imgObj.x + halfW > maxX) maxX = imgObj.x + halfW;
           if (imgObj.y - halfH < minY) minY = imgObj.y - halfH;
           if (imgObj.y + halfH > maxY) maxY = imgObj.y + halfH;
+          hasValidVisibleElements = true;
         }
       }
      
+      if (!hasValidVisibleElements) {
+        triggerCustomNotification('Workspace contains no visible elements to save!');
+        return;
+      }
+
       let pad = 80;
       minX -= pad; minY -= pad; maxX += pad; maxY += pad;
       
@@ -1536,6 +1546,7 @@
         offCanvas.height = computedHeight;
         let offCtx = offCanvas.getContext('2d');
         
+        // Render crisp pure white sheet background explicitly to mask away potential transparent-black artifacts
         offCtx.fillStyle = '#ffffff';
         offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
         
@@ -1575,7 +1586,6 @@
         link.click();
       } catch(e) {
         triggerCustomNotification('Error processing snapshot. Attempting compression standard rescue.');
-        // Minimal fallback layout backup loop context if standard execution errors out
         let genericCanvas = document.createElement('canvas');
         genericCanvas.width = window.innerWidth;
         genericCanvas.height = window.innerHeight;
