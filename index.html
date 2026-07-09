@@ -29,7 +29,7 @@
       --accent-hover: #0056b3;
       --chat-mine: #007aff;
       --chat-other: rgba(0, 0, 0, 0.06);
-      --panel-shadow: 0 20px 40px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.4);
+      --panel-shadow: 0 20px 40px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255,255,255,0.4);
       --dot-green: #34c759;
       --dot-red: #ff3b30;
     }
@@ -421,11 +421,18 @@
     let width = window.innerWidth;
     let height = window.innerHeight;
 
+    // Isolated Layer Offscreen Buffer for Vector Ink Rendering 
+    // This allows the normal eraser to cleanly subtract line data without drawing messy white boxes over background images.
+    const scratchCanvas = document.createElement('canvas');
+    const scratchCtx = scratchCanvas.getContext('2d');
+
     function resize() {
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = width;
       canvas.height = height;
+      scratchCanvas.width = width;
+      scratchCanvas.height = height;
       drawAll();
     }
     window.addEventListener('resize', resize);
@@ -491,7 +498,18 @@
       ctxToUse.shadowBlur = 0;
       ctxToUse.shadowColor = 'transparent';
       
-      if (brushType === 'eraser' || brushType === 'img-eraser') {
+      // Dynamic Brush Modulators
+      if (brushType === 'eraser') {
+        // Normal Eraser uses destination-out inside the isolated drawing layer to wipe paths cleanly
+        ctxToUse.globalCompositeOperation = 'destination-out';
+        ctxToUse.strokeStyle = 'rgba(0,0,0,1)';
+        ctxToUse.fillStyle = 'rgba(0,0,0,1)';
+        return;
+      }
+      
+      if (brushType === 'img-eraser') {
+        // Image Eraser acts as a painting brush with solid white masking to paint over background images
+        ctxToUse.globalCompositeOperation = 'source-over';
         ctxToUse.strokeStyle = '#ffffff';
         ctxToUse.fillStyle = '#ffffff';
         return;
@@ -523,7 +541,7 @@
     }
 
     function renderStroke(ctxToUse, stroke) {
-      if(!stroke.pts || stroke.pts.length === 0 || stroke.brush === 'img-eraser') return;
+      if(!stroke.pts || stroke.pts.length === 0) return;
       ctxToUse.save();
       applyBrushStyles(ctxToUse, stroke.brush, stroke.color, stroke.size, stroke.opacity);
      
@@ -572,13 +590,15 @@
     }
 
     function drawAll() {
+      // Step 1: Render Global Canvas Core Solid Background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
+      
       ctx.save();
       ctx.translate(camera.x, camera.y);
       ctx.scale(camera.scale, camera.scale);
       
-      // Render multiple active cloud data images inside the coordinate tree hierarchy
+      // Step 2: Render Multiple Active Cloud Data Images Into Coordinates Tree Hierarchy
       for (let imgId in localImages) {
         let imgObj = localImages[imgId];
         if (imgObj.element && imgObj.element.complete) {
@@ -592,28 +612,68 @@
         }
       }
       
-      // Loop over and draw active database vector paths
+      // Step 3: Draw Image Eraser Strokes Directly Over Image Objects, Beneath Vector Drawings
       for(let id of strokeOrder) {
-        if(localStrokes[id]) renderStroke(ctx, localStrokes[id]);
+        let stroke = localStrokes[id];
+        if(stroke && stroke.brush === 'img-eraser') {
+          renderStroke(ctx, stroke);
+        }
+      }
+      ctx.restore();
+
+      // Step 4: Clear and Render Regular Ink Lines onto Isolated Offscreen Canvas Buffer Layer
+      scratchCtx.clearRect(0, 0, width, height);
+      scratchCtx.save();
+      scratchCtx.translate(camera.x, camera.y);
+      scratchCtx.scale(camera.scale, camera.scale);
+      
+      for(let id of strokeOrder) {
+        let stroke = localStrokes[id];
+        if(stroke && stroke.brush !== 'img-eraser') {
+          renderStroke(scratchCtx, stroke);
+        }
       }
       
-      // Vector perfect rendering of local active geometric creation overlays
-      if((tool.brush === 'circle' || tool.brush === 'square') && isDrawing && shapeStartPoint && shapePreviewPoint) {
-        ctx.save();
-        applyBrushStyles(ctx, tool.brush, tool.color, tool.size, tool.opacity);
-        ctx.beginPath();
+      // Vector Perfect Rendering of Local Active Geometric Creation Overlays
+      if((tool.brush === 'circle' || tool.brush === 'square') && isDrawing && shapeStartPoint && shapePreviewPoint && tool.brush !== 'img-eraser') {
+        scratchCtx.save();
+        applyBrushStyles(scratchCtx, tool.brush, tool.color, tool.size, tool.opacity);
+        scratchCtx.beginPath();
         if(tool.brush === 'circle') {
           let radius = Math.sqrt(Math.pow(shapePreviewPoint.x - shapeStartPoint.x, 2) + Math.pow(shapePreviewPoint.y - shapeStartPoint.y, 2));
-          ctx.arc(shapeStartPoint.x, shapeStartPoint.y, radius, 0, 2 * Math.PI);
+          scratchCtx.arc(shapeStartPoint.x, shapeStartPoint.y, radius, 0, 2 * Math.PI);
         } else {
-          ctx.rect(shapeStartPoint.x, shapeStartPoint.y, shapePreviewPoint.x - shapeStartPoint.x, shapePreviewPoint.y - shapeStartPoint.y);
+          scratchCtx.rect(shapeStartPoint.x, shapeStartPoint.y, shapePreviewPoint.x - shapeStartPoint.x, shapePreviewPoint.y - shapeStartPoint.y);
         }
-        ctx.stroke();
-        ctx.restore();
+        scratchCtx.stroke();
+        scratchCtx.restore();
       }
 
-      // Dynamic "lover" target cursor text tag rendering layer
+      // Draw local live preview for image eraser directly over raw buffer elements
+      if(tool.brush === 'img-eraser' && isDrawing && shapeStartPoint && shapePreviewPoint) {
+        ctx.save();
+        ctx.translate(camera.x, camera.y);
+        ctx.scale(camera.scale, camera.scale);
+        ctx.save();
+        applyBrushStyles(ctx, 'img-eraser', '#ffffff', tool.size, 1);
+        ctx.beginPath();
+        ctx.moveTo(shapeStartPoint.x, shapeStartPoint.y);
+        ctx.lineTo(shapePreviewPoint.x, shapePreviewPoint.y);
+        ctx.stroke();
+        ctx.restore();
+        ctx.restore();
+      }
+      
+      scratchCtx.restore();
+
+      // Step 5: Composite Clean Isolated Drawing Backing Array Onto Screen Top-Most Stack
+      ctx.drawImage(scratchCanvas, 0, 0);
+
+      // Step 6: Dynamic "Lover" Target Cursor Text Tag Rendering Layer
       if (showNameTags) {
+        ctx.save();
+        ctx.translate(camera.x, camera.y);
+        ctx.scale(camera.scale, camera.scale);
         for(let id of strokeOrder) {
           let currentStroke = localStrokes[id];
           if(currentStroke && currentStroke.uid !== myUid && currentStroke.pts && !currentStroke.finished) {
@@ -651,8 +711,8 @@
             }
           }
         }
+        ctx.restore();
       }
-      ctx.restore();
     }
 
     // Comprehensive Hex Color-To-RGBA Array Conversion Routine
@@ -780,25 +840,6 @@
       });
     }
 
-    // Specialized Image Removal Raycasting Logic (Image Eraser Tool Target Engine)
-    function checkAndEraseImageAt(worldPt) {
-      // Traverse backwards so the top-most visual image is targeted first
-      let imageIds = Object.keys(localImages).reverse();
-      for (let id of imageIds) {
-        let imgObj = localImages[id];
-        if (!imgObj.element || !imgObj.element.complete) continue;
-        
-        let halfW = (imgObj.element.width * imgObj.scale) / 2;
-        let halfH = (imgObj.element.height * imgObj.scale) / 2;
-        
-        if (worldPt.x >= (imgObj.x - halfW) && worldPt.x <= (imgObj.x + halfW) &&
-            worldPt.y >= (imgObj.y - halfH) && worldPt.y <= (imgObj.y + halfH)) {
-          remove(ref(db, `sharedImages/${id}`));
-          break;
-        }
-      }
-    }
-
     // Touch Interaction Logic Controller Layers
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -836,7 +877,7 @@
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       }
-      // Condition 4: Basic Write/Draw Operations
+      // Condition 4: Basic Write/Draw/Eraser Operations
       else if (touches.length === 1 && currentMode === 'draw') {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         
@@ -845,18 +886,18 @@
           return;
         }
         
-        if (tool.brush === 'img-eraser') {
-          checkAndEraseImageAt(pt);
-          return;
-        }
-        
         isDrawing = true;
         isPanning = false;
         
-        if(tool.brush === 'circle' || tool.brush === 'square') {
+        if((tool.brush === 'circle' || tool.brush === 'square') && tool.brush !== 'img-eraser') {
           shapeStartPoint = pt;
           shapePreviewPoint = pt;
         } else {
+          // Both standard erasers and image erasers register coordinates along standard line nodes
+          if(tool.brush === 'img-eraser') {
+            shapeStartPoint = pt;
+            shapePreviewPoint = pt;
+          }
           let newStrokeRef = push(strokesRef);
           currentStrokeId = newStrokeRef.key;
          
@@ -901,13 +942,15 @@
       // Handler 2: Drag/Draw operational line coordinate vectors or shape previews
       else if (isDrawing && touches.length === 1) {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
-        if((tool.brush === 'circle' || tool.brush === 'square') && shapeStartPoint) {
+        if((tool.brush === 'circle' || tool.brush === 'square') && tool.brush !== 'img-eraser' && shapeStartPoint) {
           shapePreviewPoint = pt;
           drawAll();
         } else if (currentStrokeId && localStrokes[currentStrokeId]) {
           let stroke = localStrokes[currentStrokeId];
           stroke.pts += `;${pt.x.toFixed(1)},${pt.y.toFixed(1)}`;
-         
+          if(tool.brush === 'img-eraser') {
+            shapePreviewPoint = pt;
+          }
           set(ref(db, `strokes/${currentStrokeId}/pts`), stroke.pts);
           drawAll();
         }
@@ -950,7 +993,7 @@
       let touches = Object.values(activeTouches);
      
       if (isDrawing) {
-        if((tool.brush === 'circle' || tool.brush === 'square') && shapeStartPoint && shapePreviewPoint) {
+        if((tool.brush === 'circle' || tool.brush === 'square') && tool.brush !== 'img-eraser' && shapeStartPoint && shapePreviewPoint) {
           let newStrokeRef = push(strokesRef);
           let shapePointsStr = `${shapeStartPoint.x.toFixed(1)},${shapeStartPoint.y.toFixed(1)};${shapePreviewPoint.x.toFixed(1)},${shapePreviewPoint.y.toFixed(1)}`;
           set(newStrokeRef, {
@@ -1050,6 +1093,7 @@
         
         let isMovingThis = (movingImageId === id);
         
+        // Expanded slider configurations allowing scale amplification thresholds up to 2000% (max="20")
         item.innerHTML = `
           <div class="image-item-header">
             <span>Layer #${index + 1} (${id.substring(1,6)})</span>
@@ -1057,7 +1101,7 @@
           </div>
           <div class="control-group">
             <label style="font-size:10px;">Scale: <span id="scale-val-${id}">${Math.round(imgObj.scale * 100)}</span>%</label>
-            <input type="range" id="slider-scale-${id}" min="0.1" max="3" step="0.02" value="${imgObj.scale}">
+            <input type="range" id="slider-scale-${id}" min="0.1" max="20" step="0.1" value="${imgObj.scale}">
           </div>
           <button class="action-btn ${isMovingThis ? 'active-toggle' : ''}" style="padding:6px; font-size:0.75rem; border-radius:8px;" id="move-img-${id}">
             ${isMovingThis ? '🔓 Move Mode: Active' : '🔒 Enable Move Mode'}
@@ -1368,9 +1412,15 @@
           offCtx.restore();
         }
       }
+
+      // Render image eraser masks directly over export image context layers
+      for(let id of strokeOrder) {
+        let stroke = localStrokes[id];
+        if(stroke && stroke.brush === 'img-eraser') renderStroke(offCtx, stroke);
+      }
       
       for(let id of strokeOrder) {
-        if(localStrokes[id]) renderStroke(offCtx, localStrokes[id]);
+        if(localStrokes[id] && localStrokes[id].brush !== 'img-eraser') renderStroke(offCtx, localStrokes[id]);
       }
       let link = document.createElement('a');
       link.download = 'shared-infinite-canvas.png';
