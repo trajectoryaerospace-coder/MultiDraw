@@ -58,38 +58,31 @@
       top: 0;
       left: 0;
     }
-    /* Cinematic 4-Second Loading Screen Overlay */
-    #loading-screen {
+
+    /* Small temporary top notification bar replacing the old bulky screen overlay */
+    #loading-text-overlay {
       position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: #09090b;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 999999;
-      transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-    }
-    .intro-title {
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(9, 9, 11, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 16px;
+      border-radius: 20px;
       color: #ffffff;
-      font-size: 2.2rem;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 8px;
-      text-align: center;
-      animation: pulseGlow 2s infinite ease-in-out;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      z-index: 999999;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .intro-subtitle {
-      color: rgba(255,255,255,0.5);
-      font-size: 1rem;
-      font-weight: 400;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
-    @keyframes pulseGlow {
-      0%, 100% { transform: scale(0.98); opacity: 0.85; text-shadow: 0 0 0px rgba(0,122,255,0); }
-      50% { transform: scale(1.02); opacity: 1; text-shadow: 0 0 25px rgba(0,122,255,0.6); }
-    }
+
     /* Landscape Mode Enforcer */
     #landscape-warning {
       display: none;
@@ -289,9 +282,8 @@
   </style>
 </head>
 <body>
-  <div id="loading-screen">
-    <div class="intro-title">Multidraw Pro</div>
-    <div class="intro-subtitle">For amazingngn Zann</div>
+  <div id="loading-text-overlay">
+    <span>Multidraw Pro Loading...</span>
   </div>
   <div id="landscape-warning">Please rotate your device to Landscape Mode.</div>
  
@@ -378,7 +370,6 @@
       <div class="action-grid">
         <button class="action-btn" id="btn-recenter">Re-center</button>
         <button class="action-btn" id="btn-undo">Undo Last</button>
-        <button class="action-btn" id="btn-toggle-nametags">🏷️ Tags: On</button>
         <button class="action-btn" id="btn-save">Save Image</button>
         <button class="action-btn danger" id="btn-clear" style="grid-column: span 2;">Clear All Canvas</button>
       </div>
@@ -406,12 +397,12 @@
     const imagesRef = ref(db, 'sharedImages');
     const myUid = 'user_' + Math.random().toString(36).substr(2, 9);
 
-    // Initial Screen Load Intro Animation Handler
+    // Fade and clear top loading label text block after exactly 4 seconds
     setTimeout(() => {
-      const introScreen = document.getElementById('loading-screen');
-      if(introScreen) {
-        introScreen.style.opacity = '0';
-        setTimeout(() => introScreen.remove(), 600);
+      const loadingLabel = document.getElementById('loading-text-overlay');
+      if (loadingLabel) {
+        loadingLabel.style.opacity = '0';
+        setTimeout(() => loadingLabel.remove(), 500);
       }
     }, 4000);
 
@@ -422,7 +413,6 @@
     let height = window.innerHeight;
 
     // Isolated Layer Offscreen Buffer for Vector Ink Rendering 
-    // This allows the normal eraser to cleanly subtract line data without drawing messy white boxes over background images.
     const scratchCanvas = document.createElement('canvas');
     const scratchCtx = scratchCanvas.getContext('2d');
 
@@ -441,7 +431,7 @@
     let camera = { x: 0, y: 0, scale: 1 };
     let currentMode = 'draw';
     let movingImageId = null; 
-    let showNameTags = true;
+    let scalingImageId = null;
     let tool = { color: '#000000', size: 10, opacity: 1, brush: 'solid' };
    
     let isDrawing = false;
@@ -461,6 +451,7 @@
     let initialPinchDistance = null;
     let initialCamera = null;
     let initialImagePos = null;
+    let initialImageScale = null;
     let activeTouches = {};
     let initialPanCenter = null;
 
@@ -498,9 +489,7 @@
       ctxToUse.shadowBlur = 0;
       ctxToUse.shadowColor = 'transparent';
       
-      // Dynamic Brush Modulators
       if (brushType === 'eraser') {
-        // Normal Eraser uses destination-out inside the isolated drawing layer to wipe paths cleanly
         ctxToUse.globalCompositeOperation = 'destination-out';
         ctxToUse.strokeStyle = 'rgba(0,0,0,1)';
         ctxToUse.fillStyle = 'rgba(0,0,0,1)';
@@ -508,7 +497,6 @@
       }
       
       if (brushType === 'img-eraser') {
-        // Image Eraser acts as a painting brush with solid white masking to paint over background images
         ctxToUse.globalCompositeOperation = 'source-over';
         ctxToUse.strokeStyle = '#ffffff';
         ctxToUse.fillStyle = '#ffffff';
@@ -590,7 +578,6 @@
     }
 
     function drawAll() {
-      // Step 1: Render Global Canvas Core Solid Background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
       
@@ -598,7 +585,6 @@
       ctx.translate(camera.x, camera.y);
       ctx.scale(camera.scale, camera.scale);
       
-      // Step 2: Render Multiple Active Cloud Data Images Into Coordinates Tree Hierarchy
       for (let imgId in localImages) {
         let imgObj = localImages[imgId];
         if (imgObj.element && imgObj.element.complete) {
@@ -612,7 +598,6 @@
         }
       }
       
-      // Step 3: Draw Image Eraser Strokes Directly Over Image Objects, Beneath Vector Drawings
       for(let id of strokeOrder) {
         let stroke = localStrokes[id];
         if(stroke && stroke.brush === 'img-eraser') {
@@ -621,7 +606,6 @@
       }
       ctx.restore();
 
-      // Step 4: Clear and Render Regular Ink Lines onto Isolated Offscreen Canvas Buffer Layer
       scratchCtx.clearRect(0, 0, width, height);
       scratchCtx.save();
       scratchCtx.translate(camera.x, camera.y);
@@ -634,7 +618,6 @@
         }
       }
       
-      // Vector Perfect Rendering of Local Active Geometric Creation Overlays
       if((tool.brush === 'circle' || tool.brush === 'square') && isDrawing && shapeStartPoint && shapePreviewPoint && tool.brush !== 'img-eraser') {
         scratchCtx.save();
         applyBrushStyles(scratchCtx, tool.brush, tool.color, tool.size, tool.opacity);
@@ -649,7 +632,6 @@
         scratchCtx.restore();
       }
 
-      // Draw local live preview for image eraser directly over raw buffer elements
       if(tool.brush === 'img-eraser' && isDrawing && shapeStartPoint && shapePreviewPoint) {
         ctx.save();
         ctx.translate(camera.x, camera.y);
@@ -665,57 +647,9 @@
       }
       
       scratchCtx.restore();
-
-      // Step 5: Composite Clean Isolated Drawing Backing Array Onto Screen Top-Most Stack
       ctx.drawImage(scratchCanvas, 0, 0);
-
-      // Step 6: Dynamic "Lover" Target Cursor Text Tag Rendering Layer
-      if (showNameTags) {
-        ctx.save();
-        ctx.translate(camera.x, camera.y);
-        ctx.scale(camera.scale, camera.scale);
-        for(let id of strokeOrder) {
-          let currentStroke = localStrokes[id];
-          if(currentStroke && currentStroke.uid !== myUid && currentStroke.pts && !currentStroke.finished) {
-            let ptsArr = currentStroke.pts.split(';');
-            let lastPtStr = ptsArr[ptsArr.length - 1];
-            if(lastPtStr) {
-              let [lx, ly] = lastPtStr.split(',').map(Number);
-              if(!isNaN(lx) && !isNaN(ly)) {
-                ctx.save();
-                ctx.font = 'bold ' + Math.max(12, 14 / camera.scale) + 'px sans-serif';
-                let textMetric = ctx.measureText("lover");
-               
-                let paddingW = 8 / camera.scale;
-                let paddingH = 5 / camera.scale;
-                let fontSize = Math.max(12, 14 / camera.scale);
-               
-                let tx = lx + (14 / camera.scale);
-                let ty = ly - (12 / camera.scale);
-                let rectW = textMetric.width + (paddingW * 2);
-                let rectH = fontSize + (paddingH * 2);
-               
-                ctx.fillStyle = 'rgba(65, 8, 8, 0.72)';
-                ctx.beginPath();
-                if (typeof ctx.roundRect === 'function') {
-                  ctx.roundRect(tx, ty - fontSize, rectW, rectH, 8 / camera.scale);
-                } else {
-                  ctx.rect(tx, ty - fontSize, rectW, rectH);
-                }
-                ctx.fill();
-               
-                ctx.fillStyle = '#ffffff';
-                ctx.fillText("lover", tx + paddingW, ty + (fontSize * 0.08));
-                ctx.restore();
-              }
-            }
-          }
-        }
-        ctx.restore();
-      }
     }
 
-    // Comprehensive Hex Color-To-RGBA Array Conversion Routine
     function getRGBAColors(hexColor, alpha) {
       let r = 0, g = 0, b = 0;
       if (hexColor.startsWith('#')) {
@@ -726,7 +660,6 @@
       return [r, g, b, Math.floor(alpha * 255)];
     }
 
-    // Full Localized Multi-Point Boundary Polygon Estimation Bucket Fill Engine
     function executeBucketVectorFill(worldStartPt) {
       const sampleWidth = Math.min(width, 800);
       const sampleHeight = Math.min(height, 600);
@@ -849,21 +782,34 @@
       }
       let touches = Object.values(activeTouches);
       
-      // Condition 1: Move Image override state
-      if (movingImageId && localImages[movingImageId] && touches.length === 1) {
+      // Condition 1: Pinch scaling dedicated action mode override
+      if (scalingImageId && localImages[scalingImageId] && touches.length === 2) {
+        isDrawing = false;
+        isPanning = false;
+        let t1x = touches[0].clientX - rect.left;
+        let t1y = touches[0].clientY - rect.top;
+        let t2x = touches[1].clientX - rect.left;
+        let t2y = touches[1].clientY - rect.top;
+        let dx = t1x - t2x;
+        let dy = t1y - t2y;
+        initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+        initialImageScale = localImages[scalingImageId].scale;
+      }
+      // Condition 2: Move Image override state
+      else if (movingImageId && localImages[movingImageId] && touches.length === 1) {
         isDrawing = false;
         isPanning = false;
         initialPanCenter = { x: touches[0].clientX - rect.left, y: touches[0].clientY - rect.top };
         initialImagePos = { x: localImages[movingImageId].x, y: localImages[movingImageId].y };
       }
-      // Condition 2: Explicit Move mode or 3 finger pan
+      // Condition 3: Explicit Move mode or 3 finger pan
       else if (touches.length === 3 || (currentMode === 'move' && touches.length === 1)) {
         isDrawing = false;
         isPanning = true;
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       }
-      // Condition 3: Multi-touch zoom/pinches
+      // Condition 4: Basic Multi-touch zoom/pinches viewport workspace camera
       else if (touches.length === 2) {
         isDrawing = false;
         isPanning = true;
@@ -877,7 +823,7 @@
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       }
-      // Condition 4: Basic Write/Draw/Eraser Operations
+      // Condition 5: Basic Write/Draw/Eraser Operations
       else if (touches.length === 1 && currentMode === 'draw') {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         
@@ -893,7 +839,6 @@
           shapeStartPoint = pt;
           shapePreviewPoint = pt;
         } else {
-          // Both standard erasers and image erasers register coordinates along standard line nodes
           if(tool.brush === 'img-eraser') {
             shapeStartPoint = pt;
             shapePreviewPoint = pt;
@@ -922,8 +867,35 @@
       }
       let touches = Object.values(activeTouches);
       
-      // Handler 1: Move target unique individual image item instance across global DB matrix keys
-      if (movingImageId && localImages[movingImageId] && initialImagePos && touches.length === 1) {
+      // Handler 1: Live Pinch gesture scale execution logic calculations on selected image item
+      if (scalingImageId && localImages[scalingImageId] && initialPinchDistance && touches.length === 2) {
+        let t1x = touches[0].clientX - rect.left;
+        let t1y = touches[0].clientY - rect.top;
+        let t2x = touches[1].clientX - rect.left;
+        let t2y = touches[1].clientY - rect.top;
+        let dx = t1x - t2x;
+        let dy = t1y - t2y;
+        let currentDist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (currentDist > 5) {
+          let scaleMultiplier = currentDist / initialPinchDistance;
+          let calculatedScale = initialImageScale * scaleMultiplier;
+          
+          // Constrain sanity range boundaries (unlimited freedom, min 0.02 to max 60x magnification)
+          if (calculatedScale < 0.02) calculatedScale = 0.02;
+          if (calculatedScale > 60) calculatedScale = 60;
+          
+          localImages[scalingImageId].scale = calculatedScale;
+          drawAll();
+          
+          let valLabel = document.getElementById(`scale-val-${scalingImageId}`);
+          if (valLabel) valLabel.innerText = Math.round(calculatedScale * 100);
+          
+          set(ref(db, `sharedImages/${scalingImageId}/scale`), calculatedScale);
+        }
+      }
+      // Handler 2: Move target unique individual image item instance across global DB matrix keys
+      else if (movingImageId && localImages[movingImageId] && initialImagePos && touches.length === 1) {
         let clientX = touches[0].clientX - rect.left;
         let clientY = touches[0].clientY - rect.top;
         let deltaX = (clientX - initialPanCenter.x) / camera.scale;
@@ -939,7 +911,7 @@
         set(ref(db, `sharedImages/${movingImageId}/x`), newX);
         set(ref(db, `sharedImages/${movingImageId}/y`), newY);
       }
-      // Handler 2: Drag/Draw operational line coordinate vectors or shape previews
+      // Handler 3: Drag/Draw operational line coordinate vectors or shape previews
       else if (isDrawing && touches.length === 1) {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         if((tool.brush === 'circle' || tool.brush === 'square') && tool.brush !== 'img-eraser' && shapeStartPoint) {
@@ -955,7 +927,7 @@
           drawAll();
         }
       }
-      // Handler 3: Shift camera operations viewport metrics
+      // Handler 4: Shift camera operations viewport metrics
       else if (isPanning && initialPanCenter) {
         let currentCenter = getTouchCenter(touches);
         let deltaX = currentCenter.x - initialPanCenter.x;
@@ -1017,6 +989,7 @@
         initialPinchDistance = null;
         initialPanCenter = null;
         initialImagePos = null;
+        initialImageScale = null;
         shapeStartPoint = null;
         shapePreviewPoint = null;
       } else {
@@ -1092,34 +1065,32 @@
         item.className = 'image-list-item';
         
         let isMovingThis = (movingImageId === id);
+        let isScalingThis = (scalingImageId === id);
         
-        // Expanded slider configurations allowing scale amplification thresholds up to 2000% (max="20")
         item.innerHTML = `
           <div class="image-item-header">
             <span>Layer #${index + 1} (${id.substring(1,6)})</span>
             <button class="action-btn danger" style="padding:4px 8px; font-size:0.7rem; border-radius:6px;" id="del-img-${id}">🗑️ Remove</button>
           </div>
-          <div class="control-group">
-            <label style="font-size:10px;">Scale: <span id="scale-val-${id}">${Math.round(imgObj.scale * 100)}</span>%</label>
-            <input type="range" id="slider-scale-${id}" min="0.1" max="20" step="0.1" value="${imgObj.scale}">
+          <div class="control-group" style="margin-bottom: 4px;">
+            <label style="font-size:10px; text-transform:none;">Scale Value: <span id="scale-val-${id}">${Math.round(imgObj.scale * 100)}</span>%</label>
           </div>
-          <button class="action-btn ${isMovingThis ? 'active-toggle' : ''}" style="padding:6px; font-size:0.75rem; border-radius:8px;" id="move-img-${id}">
-            ${isMovingThis ? '🔓 Move Mode: Active' : '🔒 Enable Move Mode'}
-          </button>
+          <div style="display:flex; gap:4px; flex-direction:column;">
+            <button class="action-btn ${isMovingThis ? 'active-toggle' : ''}" style="padding:6px; font-size:0.75rem; border-radius:8px;" id="move-img-${id}">
+              ${isMovingThis ? '🔓 Move Mode: Active' : '🔒 Enable Move Mode'}
+            </button>
+            <button class="action-btn ${isScalingThis ? 'active-toggle' : ''}" style="padding:6px; font-size:0.75rem; border-radius:8px; background: ${isScalingThis ? '#ff9500' : 'rgba(0,122,255,0.15)'}; color: ${isScalingThis ? 'white' : 'var(--text)'};" id="scale-img-${id}">
+              ${isScalingThis ? '🔍 Scale Mode: Pinch Display' : '📱 Enable Scale Button (Pinch)'}
+            </button>
+          </div>
         `;
         
         listContainer.appendChild(item);
         
-        // Dynamically append individual control events inside loop context
         document.getElementById(`del-img-${id}`).onclick = () => {
           if (movingImageId === id) movingImageId = null;
+          if (scalingImageId === id) scalingImageId = null;
           remove(ref(db, `sharedImages/${id}`));
-        };
-        
-        document.getElementById(`slider-scale-${id}`).oninput = (e) => {
-          let nScale = parseFloat(e.target.value);
-          document.getElementById(`scale-val-${id}`).innerText = Math.round(nScale * 100);
-          set(ref(db, `sharedImages/${id}/scale`), nScale);
         };
         
         document.getElementById(`move-img-${id}`).onclick = () => {
@@ -1127,6 +1098,17 @@
             movingImageId = null;
           } else {
             movingImageId = id;
+            scalingImageId = null; // deactivate scale if dragging
+          }
+          rebuildImageUIControls();
+        };
+
+        document.getElementById(`scale-img-${id}`).onclick = () => {
+          if (scalingImageId === id) {
+            scalingImageId = null;
+          } else {
+            scalingImageId = id;
+            movingImageId = null; // deactivate move if scaling
           }
           rebuildImageUIControls();
         };
@@ -1161,10 +1143,7 @@
         localImages[id].y = data.y;
         localImages[id].scale = data.scale;
         
-        // Update input slider configurations explicitly if loaded matching layout
-        let slider = document.getElementById(`slider-scale-${id}`);
         let lbl = document.getElementById(`scale-val-${id}`);
-        if(slider) slider.value = data.scale;
         if(lbl) lbl.innerText = Math.round(data.scale * 100);
         
         drawAll();
@@ -1175,6 +1154,7 @@
       let id = snapshot.key;
       delete localImages[id];
       if (movingImageId === id) movingImageId = null;
+      if (scalingImageId === id) scalingImageId = null;
       rebuildImageUIControls();
       drawAll();
     });
@@ -1327,24 +1307,11 @@
         img.src = event.target.result;
       };
       reader.readAsDataURL(file);
-      e.target.value = ''; // clear selection to allow re-uploads
+      e.target.value = '';
     };
 
     // ==== ADVANCED SYSTEM OPERATION FUNCTIONS ====
     document.getElementById('btn-recenter').onclick = resetCamera;
-   
-    const toggleTagsBtn = document.getElementById('btn-toggle-nametags');
-    toggleTagsBtn.onclick = () => {
-      showNameTags = !showNameTags;
-      if(showNameTags) {
-        toggleTagsBtn.innerText = "🏷️ Tags: On";
-        toggleTagsBtn.classList.remove('danger');
-      } else {
-        toggleTagsBtn.innerText = "🏷️ Tags: Off";
-        toggleTagsBtn.classList.add('danger');
-      }
-      drawAll();
-    };
 
     document.getElementById('btn-undo').onclick = async () => {
       for(let i = strokeOrder.length - 1; i >= 0; i--) {
@@ -1390,7 +1357,7 @@
           if (imgObj.y + halfH > maxY) maxY = imgObj.y + halfH;
         }
       }
-      
+     
       let pad = 80;
       minX -= pad; minY -= pad; maxX += pad; maxY += pad;
      
@@ -1413,7 +1380,6 @@
         }
       }
 
-      // Render image eraser masks directly over export image context layers
       for(let id of strokeOrder) {
         let stroke = localStrokes[id];
         if(stroke && stroke.brush === 'img-eraser') renderStroke(offCtx, stroke);
