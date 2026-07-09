@@ -1574,9 +1574,26 @@
           if(stroke && stroke.brush === 'img-eraser') renderStroke(offCtx, stroke);
         }
         
+        // FIXED LAYER ISOLATION SYSTEM FOR EXPORTS:
+        // Render strokes to a separate isolated offscreen canvas to prevent the ink eraser from wiping out the white background layer
+        let offScratchCanvas = document.createElement('canvas');
+        offScratchCanvas.width = computedWidth;
+        offScratchCanvas.height = computedHeight;
+        let offScratchCtx = offScratchCanvas.getContext('2d');
+        
+        offScratchCtx.save();
+        offScratchCtx.scale(structuralScale, structuralScale);
+        offScratchCtx.translate(-minX, -minY);
+        
         for(let id of strokeOrder) {
-          if(localStrokes[id] && localStrokes[id].brush !== 'img-eraser') renderStroke(offCtx, localStrokes[id]);
+          if(localStrokes[id] && localStrokes[id].brush !== 'img-eraser') {
+            renderStroke(offScratchCtx, localStrokes[id]);
+          }
         }
+        offScratchCtx.restore();
+        
+        // Composites the cleanly structured drawings back on top of the backgrounds and images
+        offCtx.drawImage(offScratchCanvas, 0, 0);
         
         offCtx.restore();
         
