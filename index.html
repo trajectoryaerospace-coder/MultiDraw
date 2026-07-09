@@ -59,7 +59,7 @@
       left: 0;
     }
 
-    /* Small temporary top loading label text block after exactly 4 seconds */
+    /* Small temporary top notification bar replacing the old bulky screen overlay */
     #loading-text-overlay {
       position: fixed;
       top: 12px;
@@ -83,69 +83,39 @@
       gap: 8px;
     }
 
-    /* Custom Floating Action Toast Top Notification Frame */
-    #custom-toast-notification {
+    /* Custom Notification Container Hook */
+    #toast-notification-zone {
       position: fixed;
-      top: -100px;
+      top: 70px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(10, 132, 255, 0.95);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      padding: 12px 24px;
-      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999999;
+      pointer-events: none;
+      width: 320px;
+    }
+    
+    .custom-toast {
+      background: rgba(20, 20, 25, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--accent);
+      padding: 12px 16px;
+      border-radius: 14px;
       color: #ffffff;
       font-size: 0.85rem;
-      font-weight: 600;
-      box-shadow: 0 12px 30px rgba(0, 122, 255, 0.3);
-      z-index: 200000;
-      pointer-events: none;
-      transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      transform: translateY(-20px);
       opacity: 0;
-      max-width: 90vw;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #custom-toast-notification.show {
-      top: 20px;
-      opacity: 1;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      pointer-events: auto;
     }
 
-    /* Permanent Live Database Engine Sync Loading Text Widget */
-    #loading-status {
-      position: fixed;
-      bottom: 12px;
-      right: 12px;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      padding: 4px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.85);
-      font-size: 11px;
-      font-weight: 500;
-      z-index: 999;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .spinner-dot {
-      width: 6px;
-      height: 6px;
-      background-color: #30d158;
-      border-radius: 50%;
-      animation: pulseGlow 1.5s infinite alternate;
-    }
-    @keyframes pulseGlow {
-      from { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 2px #30d158; }
-      to { transform: scale(1.2); opacity: 1; box-shadow: 0 0 8px #30d158; }
+    .custom-toast.show {
+      transform: translateY(0);
+      opacity: 1;
     }
 
     /* Landscape Mode Enforcer */
@@ -329,11 +299,6 @@
       flex-direction: column;
       gap: 8px;
     }
-    #chat-header-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
     #chat-box {
       min-height: 100px; max-height: 140px;
       overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
@@ -352,19 +317,12 @@
   </style>
 </head>
 <body>
-  <div id="custom-toast-notification">
-    <span>💬 New Message Received</span>
-  </div>
-
-  <div id="loading-status">
-    <div class="spinner-dot"></div>
-    <span>Syncing DB Engine...</span>
-  </div>
-
   <div id="loading-text-overlay">
-    <span>Multidraw Pro Loading...</span>
+    <span id="loading-txt-node">Multidraw Pro Initializing Database Streams...</span>
   </div>
   <div id="landscape-warning">Please rotate your device to Landscape Mode.</div>
+  
+  <div id="toast-notification-zone"></div>
  
   <canvas id="canvas"></canvas>
   
@@ -378,16 +336,14 @@
    
     <div class="panel-content">
       <div class="control-group">
-        <div id="chat-header-row">
-          <label>Live Synchronized Chat</label>
-          <button id="btn-clear-chat" style="background: none; border: none; color: #ff453a; font-size: 11px; font-weight: 600; cursor: pointer;">🗑️ Clear Chat History</button>
-        </div>
+        <label>Live Synchronized Chat</label>
         <div id="chat-wrapper">
           <div id="chat-box"></div>
           <div class="chat-input-row">
             <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
             <button id="send-chat">Send</button>
           </div>
+          <button class="action-btn danger" id="btn-clear-chat" style="padding: 5px; font-size: 0.75rem; border-radius: 8px;">🗑️ Clear Chat History</button>
         </div>
       </div>
 
@@ -479,33 +435,51 @@
     const imagesRef = ref(db, 'sharedImages');
     const myUid = 'user_' + Math.random().toString(36).substr(2, 9);
 
-    // Initial load overlay control
-    setTimeout(() => {
-      const loadingLabel = document.getElementById('loading-text-overlay');
-      if (loadingLabel) {
-        loadingLabel.style.opacity = '0';
-        setTimeout(() => loadingLabel.remove(), 500);
-      }
-    }, 4000);
+    // Dynamic Top UI elements control mapping vectors
+    const loadingTextOverlay = document.getElementById('loading-text-overlay');
+    const loadingTextNode = document.getElementById('loading-txt-node');
+    const toastZone = document.getElementById('toast-notification-zone');
 
-    // Active status monitoring updates
-    onValue(strokesRef, () => {
-      const liveStatus = document.querySelector('#loading-status span');
-      if (liveStatus) liveStatus.innerText = "Sync Active";
-    });
+    // Streaming Queue Buffers to support responsive non-blocking rendering loop cycles
+    let strokeSyncQueue = [];
+    let chatSyncQueue = [];
+    let processingQueue = false;
+    let baselineDataLoaded = false;
+    let totalPendingPayloads = 0;
 
-    // Custom notification slide controller
-    let toastTimeout = null;
-    function showCustomNotification(messageText) {
-      const toast = document.getElementById('custom-toast-notification');
-      if(!toast) return;
-      toast.querySelector('span').innerText = `💬 Chat: ${messageText}`;
-      toast.classList.add('show');
+    function triggerCustomNotification(messageText) {
+      const toast = document.createElement('div');
+      toast.className = 'custom-toast';
+      toast.innerText = messageText;
+      toastZone.appendChild(toast);
       
-      if(toastTimeout) clearTimeout(toastTimeout);
-      toastTimeout = setTimeout(() => {
+      setTimeout(() => { toast.classList.add('show'); }, 50);
+      
+      setTimeout(() => {
         toast.classList.remove('show');
+        setTimeout(() => { toast.remove(); }, 400);
       }, 3500);
+    }
+
+    function updateLoadingFeedbackStatus() {
+      if (totalPendingPayloads > 0) {
+        if (loadingTextOverlay) {
+          loadingTextOverlay.style.opacity = '1';
+          loadingTextOverlay.style.display = 'flex';
+        }
+        if (loadingTextNode) {
+          loadingTextNode.innerText = `Loading workspace assets data syncs... [${totalPendingPayloads} elements remaining]`;
+        }
+      } else {
+        if (loadingTextNode) {
+          loadingTextNode.innerText = 'Workspace completely synced! Enjoy drawing.';
+        }
+        setTimeout(() => {
+          if (totalPendingPayloads === 0 && loadingTextOverlay) {
+            loadingTextOverlay.style.opacity = '0';
+          }
+        }, 1500);
+      }
     }
 
     // Canvas Element Context Initializations
@@ -875,6 +849,64 @@
       });
     }
 
+    // Process Queued Streaming Pipelines one by one to avoid event loop thread freezing
+    async function executeNextAsynchronousTransaction() {
+      if (processingQueue) return;
+      
+      if (strokeSyncQueue.length > 0) {
+        processingQueue = true;
+        const record = strokeSyncQueue.shift();
+        
+        localStrokes[record.id] = record.data;
+        if (!strokeOrder.includes(record.id)) {
+          strokeOrder.push(record.id);
+        }
+        
+        drawAll();
+        if (totalPendingPayloads > 0) totalPendingPayloads--;
+        updateLoadingFeedbackStatus();
+        
+        // Non-blocking timeout allows rendering frame engine to paint smoothly
+        setTimeout(() => {
+          processingQueue = false;
+          executeNextAsynchronousTransaction();
+        }, 12);
+        return;
+      }
+      
+      if (chatSyncQueue.length > 0) {
+        processingQueue = true;
+        const chatItem = chatSyncQueue.shift();
+        
+        const div = document.createElement('div');
+        div.className = 'chat-msg ' + (chatItem.data.uid === myUid ? 'mine' : 'other');
+        div.innerText = chatItem.data.text;
+        
+        const chatBox = document.getElementById('chat-box');
+        if (chatBox) {
+          chatBox.appendChild(div);
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        if (chatItem.data.uid !== myUid) {
+          if (panel.classList.contains('minimized')) {
+            const notiDot = document.getElementById('noti-dot');
+            if (notiDot) notiDot.classList.add('unread');
+          }
+          triggerCustomNotification(`New message: "${chatItem.data.text}"`);
+        }
+        
+        if (totalPendingPayloads > 0) totalPendingPayloads--;
+        updateLoadingFeedbackStatus();
+        
+        setTimeout(() => {
+          processingQueue = false;
+          executeNextAsynchronousTransaction();
+        }, 25);
+        return;
+      }
+    }
+
     // Touch Interaction Logic Controller Layers
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -884,6 +916,7 @@
       }
       let touches = Object.values(activeTouches);
       
+      // Condition 1: Pinch scaling dedicated action mode override
       if (scalingImageId && localImages[scalingImageId] && touches.length === 2) {
         isDrawing = false;
         isPanning = false;
@@ -896,18 +929,21 @@
         initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
         initialImageScale = localImages[scalingImageId].scale;
       }
+      // Condition 2: Move Image override state
       else if (movingImageId && localImages[movingImageId] && touches.length === 1) {
         isDrawing = false;
         isPanning = false;
         initialPanCenter = { x: touches[0].clientX - rect.left, y: touches[0].clientY - rect.top };
         initialImagePos = { x: localImages[movingImageId].x, y: localImages[movingImageId].y };
       }
+      // Condition 3: Explicit Move mode or 3 finger pan
       else if (touches.length === 3 || (currentMode === 'move' && touches.length === 1)) {
         isDrawing = false;
         isPanning = true;
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       }
+      // Condition 4: Basic Multi-touch zoom/pinches viewport workspace camera
       else if (touches.length === 2) {
         isDrawing = false;
         isPanning = true;
@@ -921,6 +957,7 @@
         initialPanCenter = getTouchCenter(touches);
         initialCamera = { ...camera };
       }
+      // Condition 5: Basic Write/Draw/Eraser Operations
       else if (touches.length === 1 && currentMode === 'draw') {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         
@@ -964,6 +1001,7 @@
       }
       let touches = Object.values(activeTouches);
       
+      // Handler 1: Live Pinch gesture scale execution logic calculations on selected image item
       if (scalingImageId && localImages[scalingImageId] && initialPinchDistance && touches.length === 2) {
         let t1x = touches[0].clientX - rect.left;
         let t1y = touches[0].clientY - rect.top;
@@ -989,6 +1027,7 @@
           set(ref(db, `sharedImages/${scalingImageId}/scale`), calculatedScale);
         }
       }
+      // Handler 2: Move target unique individual image item instance across global DB matrix keys
       else if (movingImageId && localImages[movingImageId] && initialImagePos && touches.length === 1) {
         let clientX = touches[0].clientX - rect.left;
         let clientY = touches[0].clientY - rect.top;
@@ -1005,6 +1044,7 @@
         set(ref(db, `sharedImages/${movingImageId}/x`), newX);
         set(ref(db, `sharedImages/${movingImageId}/y`), newY);
       }
+      // Handler 3: Drag/Draw operational line coordinate vectors or shape previews
       else if (isDrawing && touches.length === 1) {
         let pt = screenToWorld(touches[0].clientX, touches[0].clientY);
         if((tool.brush === 'circle' || tool.brush === 'square') && tool.brush !== 'img-eraser' && shapeStartPoint) {
@@ -1020,6 +1060,7 @@
           drawAll();
         }
       }
+      // Handler 4: Shift camera operations viewport metrics
       else if (isPanning && initialPanCenter) {
         let currentCenter = getTouchCenter(touches);
         let deltaX = currentCenter.x - initialPanCenter.x;
@@ -1105,13 +1146,22 @@
       drawAll();
     });
 
-    // Cloud Database Synchronizations & Direct Pipeline Receivers
+    // Cloud Database Synchronizations & Stream interceptors
     onChildAdded(strokesRef, (snapshot) => {
       let id = snapshot.key;
-      if(!localStrokes[id]) {
-        localStrokes[id] = snapshot.val();
-        strokeOrder.push(id);
-        drawAll();
+      let val = snapshot.val();
+      
+      if (!baselineDataLoaded) {
+        totalPendingPayloads++;
+        strokeSyncQueue.push({ id: id, data: val });
+        updateLoadingFeedbackStatus();
+        executeNextAsynchronousTransaction();
+      } else {
+        if (!localStrokes[id]) {
+          localStrokes[id] = val;
+          strokeOrder.push(id);
+          drawAll();
+        }
       }
     });
 
@@ -1143,6 +1193,7 @@
     // Dynamic Multi-Image Scroll Interface Builder Render Engine
     function rebuildImageUIControls() {
       const listContainer = document.getElementById('image-control-list');
+      if (!listContainer) return;
       listContainer.innerHTML = '';
       
       let keys = Object.keys(localImages);
@@ -1180,7 +1231,7 @@
         listContainer.appendChild(item);
         
         document.getElementById(`del-img-${id}`).onclick = () => {
-          if (confirm("Are you sure you want to completely delete this image layer from the shared canvas?")) {
+          if (confirm('Are you absolute sure you want to permanently delete this shared image matrix from the canvas?')) {
             if (movingImageId === id) movingImageId = null;
             if (scalingImageId === id) scalingImageId = null;
             remove(ref(db, `sharedImages/${id}`));
@@ -1292,6 +1343,7 @@
       }
     };
 
+    // Color theme layouts toggles
     document.getElementById('theme-toggle').onclick = () => {
       let current = document.documentElement.getAttribute('data-theme');
       let next = current === 'light' ? 'dark' : 'light';
@@ -1299,6 +1351,7 @@
       document.getElementById('theme-toggle').innerText = next === 'light' ? '🌙' : '☀️';
     };
 
+    // Global Interactive Segment State Mappings
     const modeDrawBtn = document.getElementById('mode-draw');
     const modeMoveBtn = document.getElementById('mode-move');
    
@@ -1313,6 +1366,7 @@
       modeDrawBtn.classList.remove('active');
     };
 
+    // Size Meter Triggers
     document.getElementById('thickness').oninput = (e) => {
       tool.size = parseInt(e.target.value);
       document.getElementById('thick-val').innerText = tool.size;
@@ -1323,6 +1377,7 @@
       document.getElementById('opac-val').innerText = Math.round(tool.opacity * 100);
     };
 
+    // Brush Selection Logic Pipeline
     document.querySelectorAll('.brush-btn').forEach(btn => {
       btn.onclick = () => {
         document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
@@ -1343,6 +1398,7 @@
       };
     });
 
+    // Custom Color Managers
     document.querySelectorAll('.color-btn').forEach(btn => {
       btn.onclick = () => {
         document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
@@ -1356,7 +1412,7 @@
       tool.color = e.target.value;
     };
 
-    // Global image uploading pipeline handlers
+    // ==== CANVAS GLOBAL MULTI-IMAGE MOUNT PIPELINES ====
     const imageUploader = document.getElementById('image-uploader');
     document.getElementById('btn-upload-trigger').onclick = () => imageUploader.click();
     
@@ -1397,7 +1453,7 @@
       e.target.value = '';
     };
 
-    // System controller handlers
+    // ==== ADVANCED SYSTEM OPERATION FUNCTIONS ====
     document.getElementById('btn-recenter').onclick = resetCamera;
 
     document.getElementById('btn-undo').onclick = async () => {
@@ -1411,35 +1467,36 @@
     };
 
     document.getElementById('btn-clear').onclick = () => {
-      if(confirm('Clear the canvas landscape for everyone?')) {
+      if(confirm('Clear the entire canvas workspace landscape for everyone? This removes all items.')) {
         remove(strokesRef);
         remove(imagesRef);
       }
     };
 
-    // Completely wipe all text message data from the chat node tree
-    document.getElementById('btn-clear-chat').onclick = () => {
-      if(confirm("Are you sure you want to wipe out the live conversation logs from the database?")) {
-        remove(chatRef).then(() => {
-          document.getElementById('chat-box').innerHTML = '';
-        });
-      }
-    };
-
-    // High performance mega drawing download engine utilizing slice buffers to bypass browser limits
+    // Safe Segmentation Saver Engine: Exposes absolute protection against core browser canvas overflow allocation limits
     document.getElementById('btn-save').onclick = () => {
-      if(strokeOrder.length === 0 && Object.keys(localImages).length === 0) return alert('Canvas workspace is empty!');
+      if(strokeOrder.length === 0 && Object.keys(localImages).length === 0) {
+        triggerCustomNotification('Canvas workspace is empty!');
+        return;
+      }
      
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let hasValidVisibleElements = false;
      
       for(let id of strokeOrder) {
         let stroke = localStrokes[id];
-        if(!stroke.pts) continue;
+        // CRITICAL FIX: Skip measurements if the stroke is an eraser
+        if(!stroke || !stroke.pts || stroke.brush === 'eraser') continue;
+        
         let pts = stroke.pts.split(';');
         for(let pt of pts) {
-          let [x,y] = pt.split(',').map(Number);
+          let parts = pt.split(',');
+          if (parts.length < 2) continue;
+          let x = parseFloat(parts[0]);
+          let y = parseFloat(parts[1]);
           if(x < minX) minX = x; if(x > maxX) maxX = x;
           if(y < minY) minY = y; if(y > maxY) maxY = y;
+          hasValidVisibleElements = true;
         }
       }
       
@@ -1452,77 +1509,55 @@
           if (imgObj.x + halfW > maxX) maxX = imgObj.x + halfW;
           if (imgObj.y - halfH < minY) minY = imgObj.y - halfH;
           if (imgObj.y + halfH > maxY) maxY = imgObj.y + halfH;
+          hasValidVisibleElements = true;
         }
       }
      
+      if (!hasValidVisibleElements) {
+        triggerCustomNotification('Workspace contains no visible elements to save!');
+        return;
+      }
+
       let pad = 80;
       minX -= pad; minY -= pad; maxX += pad; maxY += pad;
-     
-      let exportWidth = Math.ceil(maxX - minX);
-      let exportHeight = Math.ceil(maxY - minY);
+      
+      let computedWidth = Math.ceil(maxX - minX);
+      let computedHeight = Math.ceil(maxY - minY);
 
-      // Safe fallback boundary check to prevent hardware context allocation drops
-      if(exportWidth <= 0 || exportHeight <= 0) {
-        exportWidth = window.innerWidth;
-        exportHeight = window.innerHeight;
-        minX = 0; minY = 0;
+      if (computedWidth <= 0 || computedHeight <= 0) {
+        computedWidth = window.innerWidth;
+        computedHeight = window.innerHeight;
+        minX = 0;
+        minY = 0;
       }
 
-      const MAX_TILED_DIMENSION = 4000;
-      let offCanvas = document.createElement('canvas');
-      offCanvas.width = exportWidth;
-      offCanvas.height = exportHeight;
-      
-      let offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-      offCtx.fillStyle = '#ffffff';
-      offCtx.fillRect(0, 0, exportWidth, exportHeight);
-
-      // Multi-layer high resolution drawing execution
-      if (exportWidth > MAX_TILED_DIMENSION || exportHeight > MAX_TILED_DIMENSION) {
-        let segmentCanvas = document.createElement('canvas');
-        segmentCanvas.width = Math.min(exportWidth, MAX_TILED_DIMENSION);
-        segmentCanvas.height = Math.min(exportHeight, MAX_TILED_DIMENSION);
-        let segmentCtx = segmentCanvas.getContext('2d');
-
-        for (let yOffset = 0; yOffset < exportHeight; yOffset += MAX_TILED_DIMENSION) {
-          for (let xOffset = 0; xOffset < exportWidth; xOffset += MAX_TILED_DIMENSION) {
-            let chunkW = Math.min(MAX_TILED_DIMENSION, exportWidth - xOffset);
-            let chunkH = Math.min(MAX_TILED_DIMENSION, exportHeight - yOffset);
-            
-            segmentCanvas.width = chunkW;
-            segmentCanvas.height = chunkH;
-            
-            segmentCtx.fillStyle = '#ffffff';
-            segmentCtx.fillRect(0, 0, chunkW, chunkH);
-            
-            segmentCtx.save();
-            segmentCtx.translate(-minX - xOffset, -minY - yOffset);
-            
-            for (let id in localImages) {
-              let imgObj = localImages[id];
-              if (imgObj.element && imgObj.element.complete) {
-                segmentCtx.save();
-                segmentCtx.translate(imgObj.x, imgObj.y);
-                segmentCtx.scale(imgObj.scale, imgObj.scale);
-                segmentCtx.drawImage(imgObj.element, -imgObj.element.width / 2, -imgObj.element.height / 2);
-                segmentCtx.restore();
-              }
-            }
-            for(let id of strokeOrder) {
-              let stroke = localStrokes[id];
-              if(stroke && stroke.brush === 'img-eraser') renderStroke(segmentCtx, stroke);
-            }
-            for(let id of strokeOrder) {
-              if(localStrokes[id] && localStrokes[id].brush !== 'img-eraser') renderStroke(segmentCtx, localStrokes[id]);
-            }
-            segmentCtx.restore();
-            
-            offCtx.drawImage(segmentCanvas, xOffset, yOffset);
-          }
-        }
-      } else {
+      // Safeguard threshold boundary against browser hardware allocation rules
+      const hardwareLimitThreshold = 16384;
+      if (computedWidth > hardwareLimitThreshold || computedHeight > hardwareLimitThreshold) {
+        let ratio = Math.min(hardwareLimitThreshold / computedWidth, hardwareLimitThreshold / computedHeight);
+        computedWidth = Math.floor(computedWidth * ratio);
+        computedHeight = Math.floor(computedHeight * ratio);
+        triggerCustomNotification('Extremely large workspace detected. Rescaling layout matrix bounds for export safety.');
+      }
+     
+      try {
+        let offCanvas = document.createElement('canvas');
+        offCanvas.width = computedWidth;
+        offCanvas.height = computedHeight;
+        let offCtx = offCanvas.getContext('2d');
+        
+        // Render crisp pure white sheet background explicitly to mask away potential transparent-black artifacts
+        offCtx.fillStyle = '#ffffff';
+        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+        
+        let scaleFactorX = computedWidth / (maxX - minX);
+        let scaleFactorY = computedHeight / (maxY - minY);
+        let structuralScale = Math.min(scaleFactorX, scaleFactorY);
+        
         offCtx.save();
+        offCtx.scale(structuralScale, structuralScale);
         offCtx.translate(-minX, -minY);
+       
         for (let id in localImages) {
           let imgObj = localImages[id];
           if (imgObj.element && imgObj.element.complete) {
@@ -1533,31 +1568,33 @@
             offCtx.restore();
           }
         }
+
         for(let id of strokeOrder) {
           let stroke = localStrokes[id];
           if(stroke && stroke.brush === 'img-eraser') renderStroke(offCtx, stroke);
         }
+        
         for(let id of strokeOrder) {
           if(localStrokes[id] && localStrokes[id].brush !== 'img-eraser') renderStroke(offCtx, localStrokes[id]);
         }
+        
         offCtx.restore();
-      }
-     
-      try {
+        
         let link = document.createElement('a');
-        link.download = 'shared-infinite-canvas.png';
-        link.href = offCanvas.toDataURL('image/png');
+        link.download = `multidraw-infinite-export-${Date.now()}.png`;
+        link.href = offCanvas.toDataURL('image/png', 0.9);
         link.click();
-      } catch(canvasLimitErr) {
-        // Fallback for massive data outputs via a Blob generation stream
-        offCanvas.toBlob((blob) => {
-          let blobUrl = URL.createObjectURL(blob);
-          let link = document.createElement('a');
-          link.download = 'shared-infinite-canvas-hd.png';
-          link.href = blobUrl;
-          link.click();
-          URL.revokeObjectURL(blobUrl);
-        }, 'image/png');
+      } catch(e) {
+        triggerCustomNotification('Error processing snapshot. Attempting compression standard rescue.');
+        let genericCanvas = document.createElement('canvas');
+        genericCanvas.width = window.innerWidth;
+        genericCanvas.height = window.innerHeight;
+        let genericCtx = genericCanvas.getContext('2d');
+        genericCtx.drawImage(canvas, 0, 0);
+        let link = document.createElement('a');
+        link.download = 'canvas-screen-fallback.png';
+        link.href = genericCanvas.toDataURL('image/png');
+        link.click();
       }
     };
 
@@ -1575,30 +1612,40 @@
     document.getElementById('send-chat').onclick = sendMsg;
     chatInput.onkeypress = (e) => { if(e.key === 'Enter') sendMsg(); };
 
-    // Set custom parameter to prevent triggering alert overlays on setup data feeds
-    let trackingInitialLoadComplete = false;
-    setTimeout(() => { trackingInitialLoadComplete = true; }, 2500);
-
     onChildAdded(chatRef, (snapshot) => {
+      let id = snapshot.key;
       let msg = snapshot.val();
-      let div = document.createElement('div');
-      div.className = 'chat-msg ' + (msg.uid === myUid ? 'mine' : 'other');
-      div.innerText = msg.text;
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
       
-      if(msg.uid !== myUid) {
-        if(panel.classList.contains('minimized') && notiDot) {
-          notiDot.classList.add('unread');
+      if (!baselineDataLoaded) {
+        totalPendingPayloads++;
+        chatSyncQueue.push({ id: id, data: msg });
+        updateLoadingFeedbackStatus();
+        executeNextAsynchronousTransaction();
+      } else {
+        const div = document.createElement('div');
+        div.className = 'chat-msg ' + (msg.uid === myUid ? 'mine' : 'other');
+        div.innerText = msg.text;
+        if (chatBox) {
+          chatBox.appendChild(div);
+          chatBox.scrollTop = chatBox.scrollHeight;
         }
-        if(trackingInitialLoadComplete) {
-          showCustomNotification(msg.text);
+        if(msg.uid !== myUid) {
+          if(panel.classList.contains('minimized') && notiDot) {
+            notiDot.classList.add('unread');
+          }
+          triggerCustomNotification(`New message: "${msg.text}"`);
         }
       }
     });
 
-    onValue(chatRef, (snapshot) => {
-      if(!snapshot.exists()) {
+    document.getElementById('btn-clear-chat').onclick = () => {
+      if(confirm('Are you absolute sure you want to completely drop and clear ALL structural chat texts histories across ALL global database nodes?')) {
+        remove(chatRef);
+      }
+    };
+
+    onValue(chatRef, (snap) => {
+      if(!snap.exists() && chatBox) {
         chatBox.innerHTML = '';
       }
     });
@@ -1606,6 +1653,17 @@
     chatInput.onfocus = () => {
       if(notiDot) notiDot.classList.remove('unread');
     };
+
+    // Wait briefly on execution startup to process structural load states efficiently
+    onValue(ref(db), () => {
+      if (!baselineDataLoaded) {
+        setTimeout(() => {
+          baselineDataLoaded = true;
+          totalPendingPayloads = 0;
+          updateLoadingFeedbackStatus();
+        }, 1200);
+      }
+    }, { onlyOnce: true });
 
     // Runtime Initialization Injections
     resize();
