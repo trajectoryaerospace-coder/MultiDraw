@@ -1523,4 +1523,142 @@
 
       // Safeguard threshold boundary against browser hardware allocation rules
       const hardwareLimitThreshold = 16384;
-      if
+      if (computedWidth > hardwareLimitThreshold || computedHeight > hardwareLimitThreshold) {
+        let ratio = Math.min(hardwareLimitThreshold / computedWidth, hardwareLimitThreshold / computedHeight);
+        computedWidth = Math.floor(computedWidth * ratio);
+        computedHeight = Math.floor(computedHeight * ratio);
+        triggerCustomNotification('Extremely large workspace detected. Rescaling layout matrix bounds for export safety.');
+      }
+     
+      try {
+        let offCanvas = document.createElement('canvas');
+        offCanvas.width = computedWidth;
+        offCanvas.height = computedHeight;
+        let offCtx = offCanvas.getContext('2d');
+        
+        offCtx.fillStyle = '#ffffff';
+        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+        
+        let scaleFactorX = computedWidth / (maxX - minX);
+        let scaleFactorY = computedHeight / (maxY - minY);
+        let structuralScale = Math.min(scaleFactorX, scaleFactorY);
+        
+        offCtx.save();
+        offCtx.scale(structuralScale, structuralScale);
+        offCtx.translate(-minX, -minY);
+       
+        for (let id in localImages) {
+          let imgObj = localImages[id];
+          if (imgObj.element && imgObj.element.complete) {
+            offCtx.save();
+            offCtx.translate(imgObj.x, imgObj.y);
+            offCtx.scale(imgObj.scale, imgObj.scale);
+            offCtx.drawImage(imgObj.element, -imgObj.element.width / 2, -imgObj.element.height / 2);
+            offCtx.restore();
+          }
+        }
+
+        for(let id of strokeOrder) {
+          let stroke = localStrokes[id];
+          if(stroke && stroke.brush === 'img-eraser') renderStroke(offCtx, stroke);
+        }
+        
+        for(let id of strokeOrder) {
+          if(localStrokes[id] && localStrokes[id].brush !== 'img-eraser') renderStroke(offCtx, localStrokes[id]);
+        }
+        
+        offCtx.restore();
+        
+        let link = document.createElement('a');
+        link.download = `multidraw-infinite-export-${Date.now()}.png`;
+        link.href = offCanvas.toDataURL('image/png', 0.9);
+        link.click();
+      } catch(e) {
+        triggerCustomNotification('Error processing snapshot. Attempting compression standard rescue.');
+        // Minimal fallback layout backup loop context if standard execution errors out
+        let genericCanvas = document.createElement('canvas');
+        genericCanvas.width = window.innerWidth;
+        genericCanvas.height = window.innerHeight;
+        let genericCtx = genericCanvas.getContext('2d');
+        genericCtx.drawImage(canvas, 0, 0);
+        let link = document.createElement('a');
+        link.download = 'canvas-screen-fallback.png';
+        link.href = genericCanvas.toDataURL('image/png');
+        link.click();
+      }
+    };
+
+    // Chat Interface Logic Core Engines
+    const chatBox = document.getElementById('chat-box');
+    const chatInput = document.getElementById('chat-input');
+   
+    function sendMsg() {
+      let text = chatInput.value.trim();
+      if(text) {
+        push(chatRef, { uid: myUid, text: text, time: Date.now() });
+        chatInput.value = '';
+      }
+    }
+    document.getElementById('send-chat').onclick = sendMsg;
+    chatInput.onkeypress = (e) => { if(e.key === 'Enter') sendMsg(); };
+
+    onChildAdded(chatRef, (snapshot) => {
+      let id = snapshot.key;
+      let msg = snapshot.val();
+      
+      if (!baselineDataLoaded) {
+        totalPendingPayloads++;
+        chatSyncQueue.push({ id: id, data: msg });
+        updateLoadingFeedbackStatus();
+        executeNextAsynchronousTransaction();
+      } else {
+        const div = document.createElement('div');
+        div.className = 'chat-msg ' + (msg.uid === myUid ? 'mine' : 'other');
+        div.innerText = msg.text;
+        if (chatBox) {
+          chatBox.appendChild(div);
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        if(msg.uid !== myUid) {
+          if(panel.classList.contains('minimized') && notiDot) {
+            notiDot.classList.add('unread');
+          }
+          triggerCustomNotification(`New message: "${msg.text}"`);
+        }
+      }
+    });
+
+    document.getElementById('btn-clear-chat').onclick = () => {
+      if(confirm('Are you absolute sure you want to completely drop and clear ALL structural chat texts histories across ALL global database nodes?')) {
+        remove(chatRef);
+      }
+    };
+
+    onValue(chatRef, (snap) => {
+      if(!snap.exists() && chatBox) {
+        chatBox.innerHTML = '';
+      }
+    });
+
+    chatInput.onfocus = () => {
+      if(notiDot) notiDot.classList.remove('unread');
+    };
+
+    // Wait briefly on execution startup to process structural load states efficiently
+    onValue(ref(db), () => {
+      if (!baselineDataLoaded) {
+        setTimeout(() => {
+          baselineDataLoaded = true;
+          totalPendingPayloads = 0;
+          updateLoadingFeedbackStatus();
+        }, 1200);
+      }
+    }, { onlyOnce: true });
+
+    // Runtime Initialization Injections
+    resize();
+    resetCamera();
+    rebuildImageUIControls();
+  </script>
+</body>
+</html>
